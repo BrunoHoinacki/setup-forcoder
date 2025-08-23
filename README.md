@@ -62,15 +62,3 @@ make app:new
 <p align="center">
   Este projeto é open-source — contribuições são bem-vindas!
 </p>
-
-<a align="center" href="https://github.com/forcoder/setup-forcoder/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=forcoder/setup-forcoder" />
-</a>
-
-<a href="https://star-history.com/#forcoder/setup-forcoder&Date">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=forcoder/setup-forcoder&type=Date&theme=dark" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=forcoder/setup-forcoder&type=Date" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=forcoder/setup-forcoder&type=Date" />
- </picture>
-</a>
