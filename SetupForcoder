@@ -1,49 +1,94 @@
-#!/bin/bash
-#
-#  SetupForcoder - Auto-installer bootstrap
-#  Autor: Comunidade Forcoder
-#  Licença: MIT
-#
+#!/usr/bin/env bash
+# SetupForcoder — bootstrap bonito :)
+# Autor: Comunidade Forcoder • Licença: MIT
 
-set -e
+set -Eeuo pipefail
 
-# Cores para mensagens
-verde="\e[32m"
-amarelo="\e[33m"
-vermelho="\e[91m"
-reset="\e[0m"
-
-echo -e "${verde}==========================================${reset}"
-echo -e "${verde}     🚀 SetupForcoder - Inicializando     ${reset}"
-echo -e "${verde}==========================================${reset}"
-echo ""
-
-# 1. Atualizar sistema
-echo -e "${amarelo}[*] Atualizando pacotes...${reset}"
-apt update -y && apt upgrade -y
-
-# 2. Instalar pacotes essenciais
-echo -e "${amarelo}[*] Instalando dependências básicas...${reset}"
-apt install -y curl git sudo unzip apt-utils jq dialog apache2-utils python3 neofetch
-
-# 3. Baixar o instalador principal (Setup)
-REPO_URL="https://raw.githubusercontent.com/BrunoHoinacki/setup-forcoder/main/Setup"
-TARGET="Setup"
-
-if [ -f "$TARGET" ]; then
-    echo -e "${amarelo}[i] Removendo instalador antigo...${reset}"
-    rm -f $TARGET
+# ===== Cores / estilo (só se terminal suporta) =====
+if [[ -t 1 ]]; then
+  BOLD="\e[1m"; DIM="\e[2m"; RESET="\e[0m"
+  C_OK="\e[38;5;84m"; C_INFO="\e[38;5;75m"; C_WARN="\e[38;5;178m"; C_ERR="\e[38;5;203m"; C_TXT="\e[38;5;250m"
+else
+  BOLD=""; DIM=""; RESET=""; C_OK=""; C_INFO=""; C_WARN=""; C_ERR=""; C_TXT=""
 fi
 
-echo -e "${amarelo}[*] Baixando o instalador principal...${reset}"
-curl -fsSL $REPO_URL -o $TARGET
+# Cursor off/on ao sair
+hide_cursor(){ [[ -t 1 ]] && printf "\e[?25l"; }
+show_cursor(){ [[ -t 1 ]] && printf "\e[?25h"; }
+trap 'show_cursor' EXIT
 
-# 4. Dar permissão e rodar
-chmod +x $TARGET
+# ===== UI helpers =====
+box(){
+  local title="$1"; local w=${2:-64}
+  local dash=$(printf '═%.0s' $(seq 1 $((w-2))))
+  printf "${C_INFO}╔%s╗${RESET}\n" "$dash"
+  printf "${C_INFO}║${RESET}%*s${BOLD}%s${RESET}%*s${C_INFO}║${RESET}\n" \
+    $(( (w-2-${#title})/2 )) "" "$title" $(( (w-2-${#title}+1)/2 )) ""
+  printf "${C_INFO}╚%s╝${RESET}\n" "$dash"
+}
 
-echo ""
-echo -e "${verde}[✓] SetupForcoder pronto!${reset}"
-echo -e "${verde}Agora executando o instalador principal...${reset}"
-echo ""
+spinner(){ # spinner "Mensagem" comando...
+  local msg="$1"; shift
+  local frames=( "⠋" "⠙" "⠹" "⠸" "⠼" "⠴" "⠦" "⠧" "⠇" "⠏" )
+  local i=0 ts rc elapsed
+  printf "%b%s%b  " "$C_INFO" "$msg" "$RESET"
+  hide_cursor
+  ts=$(date +%s)
+  ( "$@" ) >/dev/null 2>&1 &
+  local pid=$!
+  while kill -0 "$pid" 2>/dev/null; do
+    printf "\r%b%s%b  %s " "$C_INFO" "${frames[$i]}" "$RESET" "$msg"
+    i=$(( (i+1) % ${#frames[@]} ))
+    sleep 0.09
+  done
+  wait "$pid"; rc=$?
+  elapsed=$(( $(date +%s) - ts ))s
+  if [[ $rc -eq 0 ]]; then
+    printf "\r%b✔%b %s  %b(%s)%b\n" "$C_OK" "$RESET" "$msg" "$DIM" "$elapsed" "$RESET"
+  else
+    printf "\r%b✖%b %s  %b(%s)%b\n" "$C_ERR" "$RESET" "$msg" "$DIM" "$elapsed" "$RESET"
+  fi
+  show_cursor
+  return $rc
+}
 
-./$TARGET
+note(){ printf "%b•%b %s\n" "$C_TXT" "$RESET" "$*"; }
+
+# ===== Banner =====
+clear
+box "🚀  SetupForcoder — Initializing"
+note "Open-source bootstrap for the main installer."
+note "Target VPS: Ubuntu 22.04 / 24.04 (recommended)."
+echo
+
+# ===== Etapas =====
+export DEBIAN_FRONTEND=noninteractive
+APTFLAGS=(-y -o Dpkg::Use-Pty=0 -o Dpkg::Options::="--force-confnew")
+
+spinner "Updating system packages" bash -c \
+  'apt-get update -qq && apt-get upgrade -qq -y' \
+  || { printf "%b[ERROR]%b apt upgrade failed\n" "$C_ERR" "$RESET"; exit 1; }
+
+spinner "Installing base dependencies" bash -c \
+  'apt-get install -qq '"${APTFLAGS[*]}"' \
+     ca-certificates curl git sudo unzip apt-utils jq dialog apache2-utils python3 neofetch >/dev/null' \
+  || { printf "%b[ERROR]%b dependencies failed\n" "$C_ERR" "$RESET"; exit 1; }
+
+REPO_URL="${REPO_URL:-https://raw.githubusercontent.com/BrunoHoinacki/setup-forcoder/main/Setup}"
+TARGET="Setup"
+
+[[ -f $TARGET ]] && spinner "Removing previous installer" rm -f "$TARGET" || true
+
+spinner "Downloading main installer" bash -c \
+  "curl -fsSL '$REPO_URL' -o '$TARGET'" \
+  || { printf "%b[ERROR]%b download failed: %s\n" "$C_ERR" "$RESET" "$REPO_URL"; exit 1; }
+
+spinner "Making installer executable" chmod +x "$TARGET" \
+  || { printf "%b[ERROR]%b chmod failed\n" "$C_ERR" "$RESET"; exit 1; }
+
+echo
+box "✅  Bootstrap complete"
+printf "%b✔%b SetupForcoder is ready.\n" "$C_OK" "$RESET"
+printf "%b➜%b Running the main installer now…\n\n" "$C_INFO" "$RESET"
+
+exec "./$TARGET"
