@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # SetupForcoder — Bootstrap inicial
 # Autor: Comunidade Forcoder • Licença: MIT
-# Versão: 0.2.0
+# Versão: 0.2.1
 
 set -Eeuo pipefail
-VERSION="0.2.0"
+VERSION="0.2.1"
 
 # ===== Cores =====
 amarelo="\e[33m"
