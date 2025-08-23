@@ -1,97 +1,68 @@
 #!/usr/bin/env bash
-# SetupForcoder — bootstrap bonito :)
+# SetupForcoder — Bootstrap inicial
 # Autor: Comunidade Forcoder • Licença: MIT
-# Versão: 0.1.0
+# Versão: 0.2.0
 
 set -Eeuo pipefail
+VERSION="0.2.0"
 
-VERSION="0.1.0"
+# ===== Cores =====
+amarelo="\e[33m"
+verde="\e[32m"
+branco="\e[97m"
+vermelho="\e[91m"
+reset="\e[0m"
 
-# ===== Cores / estilo (só se terminal suporta) =====
-if [[ -t 1 ]]; then
-  BOLD="\e[1m"; DIM="\e[2m"; RESET="\e[0m"
-  C_OK="\e[38;5;84m"; C_INFO="\e[38;5;75m"; C_WARN="\e[38;5;178m"; C_ERR="\e[38;5;203m"; C_TXT="\e[38;5;250m"
-else
-  BOLD=""; DIM=""; RESET=""; C_OK=""; C_INFO=""; C_WARN=""; C_ERR=""; C_TXT=""
-fi
-
-# Cursor off/on ao sair
-hide_cursor(){ [[ -t 1 ]] && printf "\e[?25l"; }
-show_cursor(){ [[ -t 1 ]] && printf "\e[?25h"; }
-trap 'show_cursor' EXIT
-
-# ===== UI helpers =====
-box(){
-  local title="$1"; local w=${2:-64}
-  local dash=$(printf '═%.0s' $(seq 1 $((w-2))))
-  printf "${C_INFO}╔%s╗${RESET}\n" "$dash"
-  printf "${C_INFO}║${RESET}%*s${BOLD}%s${RESET}%*s${C_INFO}║${RESET}\n" \
-    $(( (w-2-${#title})/2 )) "" "$title" $(( (w-2-${#title}+1)/2 )) ""
-  printf "${C_INFO}╚%s╝${RESET}\n" "$dash"
-}
-
-spinner(){ # spinner "Mensagem" comando...
-  local msg="$1"; shift
-  local frames=( "⠋" "⠙" "⠹" "⠸" "⠼" "⠴" "⠦" "⠧" "⠇" "⠏" )
-  local i=0 ts rc elapsed
-  printf "%b%s%b  " "$C_INFO" "$msg" "$RESET"
-  hide_cursor
-  ts=$(date +%s)
-  ( "$@" ) >/dev/null 2>&1 &
-  local pid=$!
-  while kill -0 "$pid" 2>/dev/null; do
-    printf "\r%b%s%b  %s " "$C_INFO" "${frames[$i]}" "$RESET" "$msg"
-    i=$(( (i+1) % ${#frames[@]} ))
-    sleep 0.09
-  done
-  wait "$pid"; rc=$?
-  elapsed=$(( $(date +%s) - ts ))s
-  if [[ $rc -eq 0 ]]; then
-    printf "\r%b✔%b %s  %b(%s)%b\n" "$C_OK" "$RESET" "$msg" "$DIM" "$elapsed" "$RESET"
-  else
-    printf "\r%b✖%b %s  %b(%s)%b\n" "$C_ERR" "$RESET" "$msg" "$DIM" "$elapsed" "$RESET"
-  fi
-  show_cursor
-  return $rc
-}
-
-note(){ printf "%b•%b %s\n" "$C_TXT" "$RESET" "$*"; }
-
-# ===== Banner =====
+# ===== Funções visuais =====
+banner() {
 clear
-box "🚀  SetupForcoder v${VERSION} — Initializing"
-note "Open-source bootstrap for the main installer."
-note "Target VPS: Ubuntu 22.04 / 24.04 (recommended)."
-echo
+echo -e "$amarelo===================================================================================================$reset"
+echo -e "$amarelo=                                                                                                 $amarelo=$reset"
+echo -e "$amarelo=   $branco   ███████╗███████╗████████╗██╗   ██╗██████╗     ███████╗ ██████╗ ██████╗  ██████╗       $amarelo=$reset"
+echo -e "$amarelo=   $branco   ██╔════╝██╔════╝╚══██╔══╝██║   ██║██╔══██╗    ██╔════╝██╔═══██╗██╔══██╗██╔════╝       $amarelo=$reset"
+echo -e "$amarelo=   $branco   ███████╗█████╗     ██║   ██║   ██║██████╔╝    █████╗  ██║   ██║██████╔╝██║            $amarelo=$reset"
+echo -e "$amarelo=   $branco   ╚════██║██╔══╝     ██║   ██║   ██║██╔═══╝     ██╔══╝  ██║   ██║██╔══██╗██║            $amarelo=$reset"
+echo -e "$amarelo=   $branco   ███████║███████╗   ██║   ╚██████╔╝██║         ██║     ╚██████╔╝██║  ██║╚██████╗       $amarelo=$reset"
+echo -e "$amarelo=   $branco   ╚══════╝╚══════╝   ╚═╝    ╚═════╝ ╚═╝         ╚═╝      ╚═════╝ ╚═╝  ╚═╝ ╚═════╝       $amarelo=$reset"
+echo -e "$amarelo=                                                                                                 $amarelo=$reset"
+echo -e "$amarelo=                                       $branco v${VERSION} $amarelo                                      $amarelo=$reset"
+echo -e "$amarelo===================================================================================================$reset"
+echo ""
+}
 
-# ===== Etapas =====
+msg_ok()   { echo -e "  ${verde}[OK]${reset} $1"; }
+msg_info() { echo -e "  ${amarelo}[*]${reset} $1"; }
+msg_err()  { echo -e "  ${vermelho}[ERRO]${reset} $1"; }
+
+# ===== Execução =====
+banner
+msg_info "Projeto open-source para bootstrap do instalador principal."
+msg_info "VPS alvo: Ubuntu 22.04 / 24.04 (recomendado)."
+echo ""
+
 export DEBIAN_FRONTEND=noninteractive
-APTFLAGS=(-y -o Dpkg::Use-Pty=0 -o Dpkg::Options::="--force-confnew")
+APTFLAGS=(-y -o Dpkg::Options::="--force-confnew")
 
-spinner "Updating system packages" bash -c \
-  'apt-get update -qq && apt-get upgrade -qq -y' \
-  || { printf "%b[ERROR]%b apt upgrade failed\n" "$C_ERR" "$RESET"; exit 1; }
+msg_info "Atualizando pacotes do sistema..."
+apt-get update -qq && apt-get upgrade -qq -y && msg_ok "Sistema atualizado." || msg_err "Falha no update/upgrade."
 
-spinner "Installing base dependencies" bash -c \
-  'apt-get install -qq '"${APTFLAGS[*]}"' \
-     ca-certificates curl git sudo unzip apt-utils jq dialog apache2-utils python3 neofetch >/dev/null' \
-  || { printf "%b[ERROR]%b dependencies failed\n" "$C_ERR" "$RESET"; exit 1; }
+msg_info "Instalando dependências essenciais..."
+apt-get install -qq "${APTFLAGS[@]}" \
+  ca-certificates curl git sudo unzip apt-utils jq dialog apache2-utils python3 neofetch \
+  && msg_ok "Dependências instaladas." || msg_err "Falha ao instalar dependências."
 
-REPO_URL="${REPO_URL:-https://raw.githubusercontent.com/BrunoHoinacki/setup-forcoder/main/Setup}"
+# ===== Baixar e rodar instalador principal =====
+REPO_URL="https://raw.githubusercontent.com/BrunoHoinacki/setup-forcoder/main/Setup"
 TARGET="Setup"
 
-[[ -f $TARGET ]] && spinner "Removing previous installer" rm -f "$TARGET" || true
+[ -f "$TARGET" ] && msg_info "Removendo instalador antigo..." && rm -f "$TARGET"
 
-spinner "Downloading main installer" bash -c \
-  "curl -fsSL '$REPO_URL' -o '$TARGET'" \
-  || { printf "%b[ERROR]%b download failed: %s\n" "$C_ERR" "$RESET" "$REPO_URL"; exit 1; }
+msg_info "Baixando instalador principal..."
+curl -fsSL "$REPO_URL" -o "$TARGET" && chmod +x "$TARGET" && msg_ok "Instalador pronto."
 
-spinner "Making installer executable" chmod +x "$TARGET" \
-  || { printf "%b[ERROR]%b chmod failed\n" "$C_ERR" "$RESET"; exit 1; }
-
-echo
-box "✅  Bootstrap complete — v${VERSION}"
-printf "%b✔%b SetupForcoder is ready.\n" "$C_OK" "$RESET"
-printf "%b➜%b Running the main installer now…\n\n" "$C_INFO" "$RESET"
+echo ""
+msg_ok "Bootstrap finalizado com sucesso!"
+msg_info "Executando instalador principal..."
+echo ""
 
 exec "./$TARGET"
