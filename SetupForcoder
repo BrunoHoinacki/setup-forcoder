@@ -18,17 +18,18 @@ banner() {
 clear
 echo -e "$amarelo===================================================================================================$reset"
 echo -e "$amarelo=                                                                                                 $amarelo=$reset"
-echo -e "$amarelo=   $branco   ███████╗███████╗████████╗██╗   ██╗██████╗     ███████╗ ██████╗ ██████╗  ██████╗       $amarelo=$reset"
-echo -e "$amarelo=   $branco   ██╔════╝██╔════╝╚══██╔══╝██║   ██║██╔══██╗    ██╔════╝██╔═══██╗██╔══██╗██╔════╝       $amarelo=$reset"
-echo -e "$amarelo=   $branco   ███████╗█████╗     ██║   ██║   ██║██████╔╝    █████╗  ██║   ██║██████╔╝██║            $amarelo=$reset"
-echo -e "$amarelo=   $branco   ╚════██║██╔══╝     ██║   ██║   ██║██╔═══╝     ██╔══╝  ██║   ██║██╔══██╗██║            $amarelo=$reset"
-echo -e "$amarelo=   $branco   ███████║███████╗   ██║   ╚██████╔╝██║         ██║     ╚██████╔╝██║  ██║╚██████╗       $amarelo=$reset"
-echo -e "$amarelo=   $branco   ╚══════╝╚══════╝   ╚═╝    ╚═════╝ ╚═╝         ╚═╝      ╚═════╝ ╚═╝  ╚═╝ ╚═════╝       $amarelo=$reset"
+echo -e "$amarelo=   $branco   ███████╗ ██████╗ ██████╗  ██████╗  ██████╗ ██████╗ ███████╗██████╗            $amarelo=$reset"
+echo -e "$amarelo=   $branco   ██╔════╝██╔═══██╗██╔══██╗██╔════╝ ██╔═══██╗██╔══██╗██╔════╝██╔══██╗           $amarelo=$reset"
+echo -e "$amarelo=   $branco   █████╗  ██║   ██║██████╔╝██║      ██║   ██║██║  ██║█████╗  ██████╔╝           $amarelo=$reset"
+echo -e "$amarelo=   $branco   ██╔══╝  ██║   ██║██╔══██╗██║      ██║   ██║██║  ██║██╔══╝  ██╔══██╗           $amarelo=$reset"
+echo -e "$amarelo=   $branco   ██║     ╚██████╔╝██║  ██║╚██████╗ ╚██████╔╝██████╔╝███████╗██║  ██║           $amarelo=$reset"
+echo -e "$amarelo=   $branco   ╚═╝      ╚═════╝ ╚═╝  ╚═╝ ╚═════╝  ╚═════╝ ╚═════╝ ╚══════╝╚═╝  ╚═╝           $amarelo=$reset"
 echo -e "$amarelo=                                                                                                 $amarelo=$reset"
-echo -e "$amarelo=                                       $branco v${VERSION} $amarelo                                      $amarelo=$reset"
+echo -e "$amarelo=                                          $branco v${VERSION} $amarelo                                         $amarelo=$reset"
 echo -e "$amarelo===================================================================================================$reset"
 echo ""
 }
+
 
 msg_ok()   { echo -e "  ${verde}[OK]${reset} $1"; }
 msg_info() { echo -e "  ${amarelo}[*]${reset} $1"; }
