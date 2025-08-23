@@ -1,0 +1,49 @@
+#!/bin/bash
+#
+#  SetupForcoder - Auto-installer bootstrap
+#  Autor: Comunidade Forcoder
+#  Licença: MIT
+#
+
+set -e
+
+# Cores para mensagens
+verde="\e[32m"
+amarelo="\e[33m"
+vermelho="\e[91m"
+reset="\e[0m"
+
+echo -e "${verde}==========================================${reset}"
+echo -e "${verde}     🚀 SetupForcoder - Inicializando     ${reset}"
+echo -e "${verde}==========================================${reset}"
+echo ""
+
+# 1. Atualizar sistema
+echo -e "${amarelo}[*] Atualizando pacotes...${reset}"
+apt update -y && apt upgrade -y
+
+# 2. Instalar pacotes essenciais
+echo -e "${amarelo}[*] Instalando dependências básicas...${reset}"
+apt install -y curl git sudo unzip apt-utils jq dialog apache2-utils python3 neofetch
+
+# 3. Baixar o instalador principal (Setup)
+REPO_URL="https://raw.githubusercontent.com/BrunoHoinacki/setup-forcoder/main/Setup"
+TARGET="Setup"
+
+if [ -f "$TARGET" ]; then
+    echo -e "${amarelo}[i] Removendo instalador antigo...${reset}"
+    rm -f $TARGET
+fi
+
+echo -e "${amarelo}[*] Baixando o instalador principal...${reset}"
+curl -fsSL $REPO_URL -o $TARGET
+
+# 4. Dar permissão e rodar
+chmod +x $TARGET
+
+echo ""
+echo -e "${verde}[✓] SetupForcoder pronto!${reset}"
+echo -e "${verde}Agora executando o instalador principal...${reset}"
+echo ""
+
+./$TARGET

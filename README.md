@@ -1,48 +1,40 @@
-<div align="left">
-<pre>
-███████╗███████╗████████╗██╗   ██╗██████╗     ███████╗ ██████╗ ██████╗  ██████╗ ██████╗ ██████╗ ███████╗██████╗ 
-██╔════╝██╔════╝╚══██╔══╝██║   ██║██╔══██╗    ██╔════╝██╔═══██╗██╔══██╗██╔════╝██╔═══██╗██╔══██╗██╔════╝██╔══██╗
-███████╗█████╗     ██║   ██║   ██║██████╔╝    █████╗  ██║   ██║██████╔╝██║     ██║   ██║██║  ██║█████╗  ██████╔╝
-╚════██║██╔══╝     ██║   ██║   ██║██╔═══╝     ██╔══╝  ██║   ██║██╔══██╗██║     ██║   ██║██║  ██║██╔══╝  ██╔══██╗
-███████║███████╗   ██║   ╚██████╔╝██║         ██║     ╚██████╔╝██║  ██║╚██████╗╚██████╔╝██████╔╝███████╗██║  ██║
-╚══════╝╚══════╝   ╚═╝    ╚═════╝ ╚═╝         ╚═╝      ╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝╚═╝  ╚═╝
-</pre>
-</div>
-                                                                                                                                                        
+# ⚡ SetupForcoder
 
-<p align="center">
-  O <b>SetupForcoder</b> é um auto-instalador <b>100% gratuito e open-source</b>, criado para simplificar o deploy de aplicações modernas em uma VPS Ubuntu.
-  <br>
-  <b>Com ele, você pode rodar múltiplos projetos Laravel em containers Docker, todos atrás de um Traefik com certificados SSL automáticos.</b>
-  <br>
-  Desenvolvido pela comunidade <b>Forcoder</b>. Se utilizar, <b>dê os créditos</b>! 🚀
-</p>
- 
----
-
-<h3>📌 Observações e Recomendações</h3>
-
-- Recomendado usar VPS de qualidade como **Contabo**, **Hetzner**, **Hostinger**, **Digital Ocean** ou **AWS**.
-- O servidor precisa estar **limpo/fresh install** para evitar conflitos.
-- Requisitos mínimos: **Ubuntu 22.04+**, **2 vCPU** e **4GB RAM**. Ajuste conforme a carga e os projetos Laravel que pretende rodar.
-- O instalador configura automaticamente:
-  - **Docker Engine + Compose plugin**
-  - **Docker Swarm + rede overlay**
-  - **Traefik** com certificados SSL via **Cloudflare DNS-01**
-  - Diretório padrão de projetos em `/workspace`
+**Deploy automatizado de aplicações Laravel em Docker Swarm, com Traefik + SSL via Cloudflare.**
+Um projeto **open-source**, direto ao ponto, feito para simplificar a vida no servidor. 🚀
 
 ---
 
-<h3>💿 Como executar o instalador</h3>
+## 🔥 O que é?
 
-<p>Para facilitar, criamos um comando curto que baixa e executa o script do setup. Basta rodar:</p>
+O **SetupForcoder** transforma uma VPS Ubuntu em um ambiente pronto para produção:
+
+* 🐳 **Docker Engine + Compose plugin**
+* ⚡ **Docker Swarm** inicializado automaticamente
+* 🌐 **Traefik** como proxy reverso + SSL automático (Cloudflare DNS-01)
+* 📂 Estrutura padrão em `/workspace` para organizar múltiplos projetos Laravel
+* 📡 Configuração automática de DNS e SMTP por aplicação
+
+---
+
+## 📌 Requisitos
+
+* Ubuntu **22.04+**
+* VPS com pelo menos **2 vCPU / 4GB RAM**
+* Domínio configurado na **Cloudflare** (token com permissão `Zone.DNS Edit`)
+* Servidor **limpo (fresh install)** para evitar conflitos
+
+---
+
+## 💿 Instalação rápida
+
+Basta rodar na sua VPS:
 
 ```bash
 bash <(curl -sSL https://setup.forcoder.com.br)
-````
+```
 
-<p>Após isso, o script instalará Docker, inicializará o Swarm e criará a estrutura base. 
-Depois é só editar o arquivo <code>.env</code> para colocar as credenciais da Cloudflare e rodar:</p>
+Após finalizar a instalação:
 
 ```bash
 make traefik:deploy
@@ -51,14 +43,23 @@ make app:new
 
 ---
 
-<h3 align="center"><b>Funcionalidades disponíveis</b></h3>
-<p align="center">
-  🔸 Traefik (reverse proxy + SSL) 🔸 Deploy múltiplos projetos Laravel 🔸 Banco de dados (MySQL por padrão) 🔸 SMTP configurável 🔸 DNS automático via Cloudflare 🔸 Menu interativo para deploy 🔸
-</p> 
+## ⚙️ Funcionalidades
+
+* 🔸 Deploy multi-projetos Laravel
+* 🔸 Proxy reverso com Traefik + certificados SSL
+* 🔸 Banco de dados MySQL pronto para uso
+* 🔸 Configuração de SMTP por aplicação
+* 🔸 DNS automático via Cloudflare
+* 🔸 Menu interativo para deploy
 
 ---
 
-<h3 align="center">📌 Contribuidores</h3>
-<p align="center">
-  Este projeto é open-source — contribuições são bem-vindas!
-</p>
+## 🤝 Contribuindo
+
+Esse projeto é **open-source** — pull requests, issues e feedbacks são super bem-vindos.
+
+---
+
+## 📜 Licença
+
+Distribuído sob a licença **MIT**.
