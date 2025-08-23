@@ -1,49 +1,141 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
-#  SetupForcoder - Auto-installer bootstrap
-#  Autor: Comunidade Forcoder
-#  Licença: MIT
+#  SetupForcoder - Auto-installer bootstrap (visual)
+#  Autor: Comunidade Forcoder • Licença: MIT
 #
 
-set -e
+set -Eeuo pipefail
 
-# Cores para mensagens
-verde="\e[32m"
-amarelo="\e[33m"
-vermelho="\e[91m"
-reset="\e[0m"
-
-echo -e "${verde}==========================================${reset}"
-echo -e "${verde}     🚀 SetupForcoder - Inicializando     ${reset}"
-echo -e "${verde}==========================================${reset}"
-echo ""
-
-# 1. Atualizar sistema
-echo -e "${amarelo}[*] Atualizando pacotes...${reset}"
-apt update -y && apt upgrade -y
-
-# 2. Instalar pacotes essenciais
-echo -e "${amarelo}[*] Instalando dependências básicas...${reset}"
-apt install -y curl git sudo unzip apt-utils jq dialog apache2-utils python3 neofetch
-
-# 3. Baixar o instalador principal (Setup)
-REPO_URL="https://raw.githubusercontent.com/BrunoHoinacki/setup-forcoder/main/Setup"
-TARGET="Setup"
-
-if [ -f "$TARGET" ]; then
-    echo -e "${amarelo}[i] Removendo instalador antigo...${reset}"
-    rm -f $TARGET
+# =============== Paleta & UI helpers ===============
+if [[ -t 1 ]]; then
+  BOLD="\e[1m"; DIM="\e[2m"; RESET="\e[0m"
+  FG_OK="\e[38;5;84m"; FG_INFO="\e[38;5;75m"; FG_WARN="\e[38;5;178m"; FG_ERR="\e[38;5;203m"; FG_TXT="\e[38;5;250m"
+else
+  BOLD=""; DIM=""; RESET=""; FG_OK=""; FG_INFO=""; FG_WARN=""; FG_ERR=""; FG_TXT=""
 fi
 
-echo -e "${amarelo}[*] Baixando o instalador principal...${reset}"
-curl -fsSL $REPO_URL -o $TARGET
+# Oculta cursor durante execução e restaura ao sair
+hide_cursor() { [[ -t 1 ]] && printf "\e[?25l"; }
+show_cursor() { [[ -t 1 ]] && printf "\e[?25h"; }
+trap 'show_cursor' EXIT
 
-# 4. Dar permissão e rodar
-chmod +x $TARGET
+# Box simples
+box() {
+  local title="$1"
+  local w=${2:-56}
+  local pad_left pad_right
+  local tlen=${#title}
+  local inner=$((w-2))
+  if (( tlen < inner )); then
+    local spaces=$((inner - tlen))
+    pad_left=$((spaces/2)); pad_right=$((spaces - pad_left))
+  else
+    pad_left=0; pad_right=0
+  fi
+  printf "${FG_INFO}╔%0.s═${RESET}" $(seq 1 $((w-2))); printf "${FG_INFO}╗${RESET}\n"
+  printf "${FG_INFO}║${RESET}%*s${BOLD}%s${RESET}%*s${FG_INFO}║${RESET}\n" "$pad_left" "" "$title" "$pad_right" ""
+  printf "${FG_INFO}╚%0.s═${RESET}" $(seq 1 $((w-2))); printf "${FG_INFO}╝${RESET}\n"
+}
 
-echo ""
-echo -e "${verde}[✓] SetupForcoder pronto!${reset}"
-echo -e "${verde}Agora executando o instalador principal...${reset}"
-echo ""
+# Spinner com tempo e status
+spinner() {
+  local msg="$1"; shift
+  local start ts now elapsed s
+  local frames=( "⠋" "⠙" "⠹" "⠸" "⠼" "⠴" "⠦" "⠧" "⠇" "⠏" )
+  local i=0
+  printf "%b●%b %s " "$FG_INFO" "$RESET" "$msg"
+  hide_cursor
+  ts=$(date +%s)
+  "$@" >/dev/null 2>&1 &
+  local pid=$!
+  while kill -0 "$pid" 2>/dev/null; do
+    printf "\r%b%s%b %s " "$FG_INFO" "${frames[$i]}" "$RESET" "$msg"
+    i=$(( (i+1) % ${#frames[@]} ))
+    sleep 0.08
+  done
+  wait "$pid"; local rc=$?
+  now=$(date +%s); elapsed=$((now-ts))
+  s="${elapsed}s"
+  if [[ $rc -eq 0 ]]; then
+    printf "\r%b✔%b %s  %b(%s)%b\n" "$FG_OK" "$RESET" "$msg" "$DIM" "$s" "$RESET"
+  else
+    printf "\r%b✖%b %s  %b(%s)%b\n" "$FG_ERR" "$RESET" "$msg" "$DIM" "$s" "$RESET"
+  fi
+  show_cursor
+  return $rc
+}
 
-./$TARGET
+# Exec com erro amigável
+run_or_die() {
+  if ! "$@"; then
+    printf "%b[ERRO]%b Falha ao executar: %s\n" "$FG_ERR" "$RESET" "$*"
+    exit 1
+  fi
+}
+
+# Elevação para root se necessário
+ensure_root() {
+  if [[ "$(id -u)" -ne 0 ]]; then
+    if command -v sudo >/dev/null 2>&1; then
+      printf "%b➜%b Elevando privilégios com sudo…\n" "$FG_INFO" "$RESET"
+      exec sudo -E bash "$0" "$@"
+    else
+      printf "%b[ERRO]%b Execute como root ou instale sudo.\n" "$FG_ERR" "$RESET"
+      exit 1
+    fi
+  fi
+}
+
+# Downloader (curl ou wget)
+fetch() {
+  local url="$1" out="$2"
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsSL "$url" -o "$out"
+  elif command -v wget >/dev/null 2>&1; then
+    wget -qO "$out" "$url"
+  else
+    printf "%b[ERRO]%b Nem curl nem wget encontrados.\n" "$FG_ERR" "$RESET"
+    return 1
+  fi
+}
+
+# =============== Começo ===============
+clear
+box "🚀  SetupForcoder — Inicializando"
+printf "%b•%b Projeto open-source para bootstrap do instalador principal.\n" "$FG_TXT" "$RESET"
+printf "%b•%b VPS alvo: Ubuntu 22.04/24.04 (recomendado)\n" "$FG_TXT" "$RESET"
+echo
+
+ensure_root "$@"
+
+export DEBIAN_FRONTEND=noninteractive
+APT_FLAGS=(-y -o Dpkg::Options::="--force-confnew" -o Dpkg::Use-Pty=0)
+
+# 1) Atualização de pacotes
+spinner "Atualizando pacotes do sistema" bash -c 'apt-get update -qq && apt-get upgrade -qq -y' \
+  || { printf "%b[ERRO]%b Não foi possível atualizar pacotes.\n" "$FG_ERR" "$RESET"; exit 1; }
+
+# 2) Dependências essenciais (silencioso)
+spinner "Instalando dependências essenciais" bash -c '
+  apt-get install -qq '"${APT_FLAGS[*]}"' \
+    ca-certificates curl git sudo unzip apt-utils jq dialog apache2-utils python3 neofetch >/dev/null
+' || { printf "%b[ERRO]%b Falha ao instalar dependências.\n" "$FG_ERR" "$RESET"; exit 1; }
+
+# 3) Baixar o instalador principal
+REPO_URL="${REPO_URL:-https://raw.githubusercontent.com/BrunoHoinacki/setup-forcoder/main/Setup}"
+TARGET="Setup"
+[[ -f "$TARGET" ]] && spinner "Removendo instalador antigo" rm -f "$TARGET" || true
+
+spinner "Baixando instalador principal" fetch "$REPO_URL" "$TARGET" \
+  || { printf "%b[ERRO]%b Não foi possível baixar %s\n" "$FG_ERR" "$RESET" "$REPO_URL"; exit 1; }
+
+# 4) Permissão e execução
+spinner "Aplicando permissões de execução" chmod +x "$TARGET" \
+  || { printf "%b[ERRO]%b Falha ao aplicar permissão em %s\n" "$FG_ERR" "$RESET" "$TARGET"; exit 1; }
+
+echo
+box "✅  Bootstrap concluído"
+printf "%b✔%b %s\n" "$FG_OK" "$RESET" "SetupForcoder pronto."
+printf "%b➜%b Executando instalador principal agora…\n\n" "$FG_INFO" "$RESET"
+
+exec "./$TARGET"
