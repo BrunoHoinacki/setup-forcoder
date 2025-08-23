@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
-# Setup (mock) — Forcoder
-# Este script é apenas para testar o fluxo inicial (menu, logs, etc).
-# Por padrão roda em modo MOCK (não faz alterações reais no sistema).
-# Quando for ativar de verdade, troque os pontos marcados como TODO(real).
+# Setup — Forcoder (REAL)
+# Converte o fluxo mock em execução real, mantendo visual e menu.
+# Para simular, execute com: RUN_MODE=mock ./Setup
 
 set -Eeuo pipefail
 
@@ -12,7 +11,7 @@ title() {
   clear
   echo -e "${C_INFO}"
   echo "==============================================================="
-  echo "                 SETUP FORCODER  •  MOCK MODE                  "
+  echo "                     S E T U P   F O R C O D E R              "
   echo "==============================================================="
   echo -e "${C_RESET}"
 }
@@ -25,104 +24,196 @@ dim()   { echo -e "${C_MUTED}$*${C_RESET}"; }
 spinner() {
   local msg="$1"; shift
   local pid
-  "$@" &> /dev/null &
-  pid=$!
-  local frames='-\|/'
-  local i=0
+  "$@" &> /dev/null & pid=$!
+  local frames='-\|/' i=0
   printf "%s " "$msg"
-  while kill -0 $pid 2>/dev/null; do
+  while kill -0 "$pid" 2>/dev/null; do
     i=$(( (i+1) % 4 ))
     printf "\r%s %s" "$msg" "${frames:$i:1}"
-    sleep 0.15
+    sleep 0.12
   done
-  wait $pid
-  local rc=$?
+  wait $pid; local rc=$?
   printf "\r"
   return $rc
 }
 
+need_root() {
+  if [[ $EUID -ne 0 ]]; then
+    fail "Execute como root (sudo -i) ou rode com sudo."
+    exit 1
+  fi
+}
+
 # ========= Config =========
-RUN_MODE="${RUN_MODE:-mock}"                  # mock | real (no futuro)
-ZIP_URL="${ZIP_URL:-https://example.com/infra-swarm-traefik-laravel_v3.zip}"
-INSTALL_DIR="${INSTALL_DIR:-$HOME/infra}"
+RUN_MODE="${RUN_MODE:-real}"   # real | mock
+ZIP_URL="${ZIP_URL:-https://github.com/BrunoHoinacki/setup-forcoder/archive/refs/heads/main.zip}"
+INSTALL_DIR="${INSTALL_DIR:-/opt/forcoder/infra}"
 WORKSPACE="${WORKSPACE:-/workspace}"
 OVERLAY_NET="${OVERLAY_NET:-edge}"
 TZ="${TZ:-America/Sao_Paulo}"
 
-# ========= Util (mock) =========
-sleep_short() { sleep 0.6; }
-sleep_med()   { sleep 1.2; }
-sleep_long()  { sleep 1.8; }
+export DEBIAN_FRONTEND=noninteractive
+APTFLAGS=(-y -o Dpkg::Options::="--force-confnew")
 
-mock_task() { # imprime como se estivesse fazendo algo
-  local what="$1"
-  spinner "$what" sleep_med && ok "$what concluído (mock)"
+# ========= Helpers =========
+apt_unlock() {
+  rm -f /var/lib/apt/lists/lock /var/cache/apt/archives/lock /var/lib/dpkg/lock-frontend || true
+  dpkg --configure -a || true
 }
 
-# ========= Passos (mock) =========
+ensure_pkg() { # ensure_pkg curl git ...
+  local pkgs=("$@")
+  apt_unlock
+  spinner "Atualizando lista de pacotes" apt-get update -qq || true
+  spinner "Instalando pacotes base" bash -c "apt-get install -qq ${APTFLAGS[*]} ${pkgs[*]}"
+}
+
+docker_installed() { command -v docker >/dev/null 2>&1; }
+swarm_active()     { docker info --format '{{.Swarm.LocalNodeState}}' 2>/dev/null | grep -qi 'active'; }
+network_exists()   { docker network ls --format '{{.Name}}' | grep -qx "$OVERLAY_NET"; }
+
+extract_zip_to() { # extract_zip_to url dest_dir
+  local url="$1" dest="$2"
+  mkdir -p "$dest"
+  local tmp="/tmp/forcoder_infra.zip"
+  spinner "Baixando pacote de infra" curl -fL "$url" -o "$tmp"
+  spinner "Extraindo pacote" bash -c "unzip -oq \"$tmp\" -d \"$dest/..\""
+  rm -f "$tmp"
+  # Se for zip do GitHub, normalmente cria "setup-forcoder-main". Vamos mover se necessário.
+  local top
+  top="$(find "$(dirname "$dest")" -mindepth 1 -maxdepth 1 -type d -name 'setup-forcoder-*' | head -n1 || true)"
+  if [[ -n "$top" && "$top" != "$dest" ]]; then
+    mkdir -p "$dest"
+    rsync -a "$top"/ "$dest"/ >/dev/null 2>&1 || true
+  fi
+}
+
+# ========= MOCK tasks =========
+sleep_short() { sleep 0.4; }
+sleep_med()   { sleep 0.9; }
+mock_task() { local what="$1"; spinner "$what" sleep_med && ok "$what concluído (mock)"; }
+
+# ========= Passos =========
 step_1_update_deps() {
   title
-  say "1/5 — Atualizando pacotes e instalando dependências base…"
-  dim "[MOCK] apt update/upgrade; pacotes: curl git unzip make jq ufw ca-certificates lsb-release"
-  # TODO(real): apt-get update && apt-get install -y ...
-  mock_task "Atualizando lista de pacotes"
-  mock_task "Instalando utilitários essenciais"
+  say "1/5 — Atualizando pacotes e instalando dependências…"
+  if [[ "$RUN_MODE" == "mock" ]]; then
+    dim "[MOCK] apt update/upgrade; pacotes: ca-certificates curl git unzip jq make ufw rsync lsb-release"
+    mock_task "Atualizando lista de pacotes"
+    mock_task "Instalando utilitários essenciais"
+  else
+    apt_unlock
+    spinner "Atualizando/atualizando pacotes" bash -c "apt-get update -qq && apt-get -qq -y upgrade"
+    ensure_pkg ca-certificates curl git unzip jq make ufw rsync lsb-release apt-transport-https gnupg
+    ok "Dependências instaladas."
+  fi
 }
 
 step_2_docker() {
   title
   say "2/5 — Instalando Docker Engine + Compose plugin…"
-  dim "[MOCK] adicionar repo oficial Docker; instalar docker-ce, docker-compose-plugin; configurar daemon.json"
-  # TODO(real): configurar repo docker + apt install docker-ce ...
-  mock_task "Configurando repositório Docker"
-  mock_task "Instalando Docker e plugins"
-  mock_task "Reiniciando serviço Docker"
+  if [[ "$RUN_MODE" == "mock" ]]; then
+    dim "[MOCK] get.docker.com; habilitar e iniciar docker"
+    mock_task "Instalando Docker"
+    mock_task "Iniciando serviço Docker"
+  else
+    if docker_installed; then
+      ok "Docker já instalado."
+    else
+      spinner "Instalando Docker (get.docker.com)" bash -c "curl -fsSL https://get.docker.com | sh"
+    fi
+    systemctl enable docker >/dev/null 2>&1 || true
+    systemctl restart docker >/dev/null 2>&1 || true
+    ok "Docker pronto."
+  fi
 }
 
 step_3_firewall() {
   title
-  say "3/5 — Ajustando UFW (sem habilitar automaticamente)…"
-  dim "[MOCK] ufw allow 22,80,443,2377,7946/tcp+udp,4789/udp"
-  # TODO(real): ufw allow ...
-  mock_task "Adicionando regras UFW necessárias"
+  say "3/5 — Ajustando UFW (não habilita automaticamente)…"
+  if [[ "$RUN_MODE" == "mock" ]]; then
+    dim "[MOCK] ufw allow 22/tcp 80/tcp 443/tcp 2377/tcp 7946/tcp 7946/udp 4789/udp"
+    mock_task "Aplicando regras UFW"
+  else
+    if command -v ufw >/dev/null 2>&1; then
+      ufw allow 22/tcp >/dev/null 2>&1 || true
+      ufw allow 80/tcp >/dev/null 2>&1 || true
+      ufw allow 443/tcp >/dev/null 2>&1 || true
+      ufw allow 2377/tcp >/dev/null 2>&1 || true
+      ufw allow 7946/tcp >/dev/null 2>&1 || true
+      ufw allow 7946/udp >/dev/null 2>&1 || true
+      ufw allow 4789/udp >/dev/null 2>&1 || true
+      ok "Regras UFW aplicadas (UFW permanece desabilitado)."
+    else
+      warn "UFW não disponível; pulando regras de firewall."
+    fi
+  fi
 }
 
 step_4_bootstrap_swarm() {
   title
-  say "4/5 — Bootstrap: Swarm + rede overlay + workspace…"
-  dim "[MOCK] docker swarm init; docker network create overlay: ${OVERLAY_NET}; mkdir -p ${WORKSPACE}"
-  # TODO(real): docker swarm init || true; docker network create ...
-  mock_task "Inicializando Docker Swarm"
-  mock_task "Criando rede overlay '${OVERLAY_NET}'"
-  mock_task "Criando diretório de projetos '${WORKSPACE}'"
+  say "4/5 — Swarm + rede overlay + workspace…"
+  if [[ "$RUN_MODE" == "mock" ]]; then
+    dim "[MOCK] docker swarm init; docker network create --driver overlay --attachable ${OVERLAY_NET}; mkdir -p ${WORKSPACE}"
+    mock_task "Inicializando Swarm"
+    mock_task "Criando rede overlay '${OVERLAY_NET}'"
+    mock_task "Criando diretório '${WORKSPACE}'"
+  else
+    # Swarm
+    if swarm_active; then
+      ok "Docker Swarm já está ativo."
+    else
+      spinner "Inicializando Docker Swarm" docker swarm init || true
+    fi
+    # Rede overlay
+    if network_exists; then
+      ok "Rede overlay '${OVERLAY_NET}' já existe."
+    else
+      spinner "Criando rede overlay '${OVERLAY_NET}'" docker network create --driver overlay --attachable "$OVERLAY_NET"
+    fi
+    # Workspace
+    mkdir -p "$WORKSPACE"
+    ok "Workspace: ${WORKSPACE}"
+  fi
 }
 
 step_5_fetch_package() {
   title
-  say "5/5 — Baixando/extraindo pacote da infra…"
-  dim "[MOCK] curl -fL '${ZIP_URL}' -> '${INSTALL_DIR}'; unzip"
-  # TODO(real): curl -fL "$ZIP_URL" -o /tmp/infra.zip && unzip -oq /tmp/infra.zip -d "$INSTALL_DIR/.."
-  mock_task "Baixando pacote"
-  mock_task "Extraindo pacote em '${INSTALL_DIR}'"
-  echo
-  ok "Infra ‘mock’ pronta para testes de fluxo."
-  echo
-  dim "Próximos passos (quando for REAL):"
-  dim "  1) cd ${INSTALL_DIR} && cp -n .env.example .env && edite CF_API_TOKEN/CF_ZONE_ID/ACME_EMAIL"
-  dim "  2) make traefik:deploy"
-  dim "  3) make app:new"
+  say "5/5 — Baixando/extraindo pacote de infra…"
+  if [[ "$RUN_MODE" == "mock" ]]; then
+    dim "[MOCK] curl -fL '${ZIP_URL}' -> unzip em '${INSTALL_DIR}'"
+    mock_task "Baixando pacote"
+    mock_task "Extraindo pacote"
+    echo
+    ok "Infra ‘mock’ pronta."
+  else
+    mkdir -p "$INSTALL_DIR"
+    extract_zip_to "$ZIP_URL" "$INSTALL_DIR"
+    ok "Infra extraída em: ${INSTALL_DIR}"
+    # pós-extrai — exemplo de .env
+    if [[ -f "${INSTALL_DIR}/.env.example" && ! -f "${INSTALL_DIR}/.env" ]]; then
+      cp -n "${INSTALL_DIR}/.env.example" "${INSTALL_DIR}/.env" || true
+      ok "Criado ${INSTALL_DIR}/.env a partir de .env.example (edite CF_API_TOKEN/ACME_EMAIL etc.)."
+    fi
+    echo
+    dim "Próximos passos:"
+    dim "  1) cd ${INSTALL_DIR} && edite o arquivo .env (Cloudflare, domínio, e-mail ACME)"
+    dim "  2) make traefik:deploy"
+    dim "  3) make app:new"
+  fi
 }
 
 # ========= Menu =========
 menu_main() {
   while true; do
     title
+    echo "Modo: ${RUN_MODE^^}"
     echo "Selecione uma opção:"
-    echo "  [1] Rodar fluxo completo (mock)"
-    echo "  [2] Somente dependências (mock)"
-    echo "  [3] Somente Docker (mock)"
-    echo "  [4] Somente Swarm/Overlay/Workspace (mock)"
-    echo "  [5] Simular download do pacote (mock)"
+    echo "  [1] Rodar fluxo completo"
+    echo "  [2] Só dependências"
+    echo "  [3] Só Docker"
+    echo "  [4] Só Swarm/Overlay/Workspace"
+    echo "  [5] Só baixar pacote de infra"
     echo "  [9] Sair"
     echo
     read -rp "Opção: " op
@@ -153,7 +244,7 @@ menu_main() {
         ;;
       9)
         title
-        ok "Encerrando o Setup (mock)."
+        ok "Encerrando o Setup."
         exit 0
         ;;
       *)
@@ -165,4 +256,5 @@ menu_main() {
 }
 
 # ========= Exec =========
+need_root
 menu_main
