@@ -33,7 +33,7 @@ O **SetupForcoder** transforma uma VPS Ubuntu em um ambiente pronto para produç
 Basta rodar na sua VPS:
 
 ```bash
-bash <(curl -sSL https://setup.forcoder.com.br)
+bash <(curl -fsSL https://raw.githubusercontent.com/BrunoHoinacki/setup-forcoder/main/SetupForcoder)
 ```
 
 Após finalizar a instalação:
