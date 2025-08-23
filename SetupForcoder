@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 # SetupForcoder — bootstrap bonito :)
 # Autor: Comunidade Forcoder • Licença: MIT
+# Versão: 0.1.0
 
 set -Eeuo pipefail
+
+VERSION="0.1.0"
 
 # ===== Cores / estilo (só se terminal suporta) =====
 if [[ -t 1 ]]; then
@@ -56,7 +59,7 @@ note(){ printf "%b•%b %s\n" "$C_TXT" "$RESET" "$*"; }
 
 # ===== Banner =====
 clear
-box "🚀  SetupForcoder — Initializing"
+box "🚀  SetupForcoder v${VERSION} — Initializing"
 note "Open-source bootstrap for the main installer."
 note "Target VPS: Ubuntu 22.04 / 24.04 (recommended)."
 echo
@@ -87,7 +90,7 @@ spinner "Making installer executable" chmod +x "$TARGET" \
   || { printf "%b[ERROR]%b chmod failed\n" "$C_ERR" "$RESET"; exit 1; }
 
 echo
-box "✅  Bootstrap complete"
+box "✅  Bootstrap complete — v${VERSION}"
 printf "%b✔%b SetupForcoder is ready.\n" "$C_OK" "$RESET"
 printf "%b➜%b Running the main installer now…\n\n" "$C_INFO" "$RESET"
 
