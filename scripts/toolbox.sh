@@ -32,15 +32,43 @@ REPO_NAME="setup-forcoder"
 REPO_BRANCH="main"
 GH_TARBALL_URL="https://github.com/${REPO_OWNER}/${REPO_NAME}/archive/refs/heads/${REPO_BRANCH}.tar.gz"
 
+# ===== Funções internas =====
+have(){ command -v "$1" >/dev/null 2>&1; }
+
+wait_apt(){
+  local locks=(/var/lib/dpkg/lock-frontend /var/lib/apt/lists/lock)
+  local msg_shown=0
+  while :; do
+    local busy=0
+    for L in "${locks[@]}"; do
+      if fuser "$L" >/dev/null 2>&1; then busy=1; fi
+    done
+    if [ $busy -eq 0 ]; then break; fi
+    if [ $msg_shown -eq 0 ]; then y "⏳ APT em uso; aguardando liberar..."; msg_shown=1; fi
+    sleep 3
+  done
+}
+
+ensure_basics(){
+  local need=()
+  have curl || need+=(curl)
+  have unzip || need+=(unzip)
+  have tar || need+=(tar)
+  [ -f /etc/ssl/certs/ca-certificates.crt ] || need+=(ca-certificates)
+
+  if [ ${#need[@]} -gt 0 ]; then
+    export DEBIAN_FRONTEND=noninteractive
+    wait_apt
+    apt-get update -y
+    apt-get install -y --no-install-recommends "${need[@]}"
+  fi
+}
+
 # ===== Bootstrap =====
 if [ ! -d "$ROOT/scripts" ]; then
   b "==> SetupForcoder não encontrado. Preparando ambiente inicial..."
 
-  # garante pacotes básicos
-  export DEBIAN_FRONTEND=noninteractive
-  apt-get update -y
-  apt-get install -y curl unzip tar ca-certificates
-
+  ensure_basics
   mkdir -p "$ROOT"
 
   # baixa última versão do GitHub (branch main)
@@ -51,21 +79,19 @@ if [ ! -d "$ROOT/scripts" ]; then
   # detecta diretório extraído (qualquer nome-*-main)
   SRC_DIR="$(find /tmp -maxdepth 1 -type d -name "${REPO_NAME}-*-${REPO_BRANCH}" -print -quit)"
   if [ -z "${SRC_DIR:-}" ]; then
-    # fallback: primeira pasta *-main
     SRC_DIR="$(find /tmp -maxdepth 1 -type d -name "*-${REPO_BRANCH}" -print -quit)"
   fi
   [ -n "${SRC_DIR:-}" ] || die "Não foi possível localizar pasta extraída do tarball."
 
-  # copia conteúdo para /opt/setupforcoder
   cp -R "${SRC_DIR}/." "$ROOT/"
 
-  # garante permissão de execução nos scripts
+  # permissões de execução
   if [ -d "$ROOT/scripts" ]; then
     chmod +x "$ROOT/scripts/"*.sh 2>/dev/null || true
     chmod +x "$ROOT/scripts"/*/*.sh 2>/dev/null || true
   fi
 
-  # cria atalho opcional
+  # atalho opcional
   if [ ! -e /usr/local/bin/setupforcoder ]; then
     ln -s "$ROOT/scripts/toolbox.sh" /usr/local/bin/setupforcoder || true
   fi
