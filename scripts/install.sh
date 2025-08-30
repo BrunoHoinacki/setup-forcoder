@@ -20,7 +20,6 @@ GH_TARBALL_URL="https://github.com/${REPO_OWNER}/${REPO_NAME}/archive/refs/heads
 
 # ========= Helpers =========
 have(){ command -v "$1" >/dev/null 2>&1; }
-
 wait_apt() {
   local locks=(/var/lib/dpkg/lock-frontend /var/lib/apt/lists/lock)
   local showed=0
@@ -34,14 +33,12 @@ wait_apt() {
     sleep 3
   done
 }
-
 ensure_basics(){
   local need=()
   have curl  || need+=(curl)
   have tar   || need+=(tar)
   have unzip || need+=(unzip)
   [ -f /etc/ssl/certs/ca-certificates.crt ] || need+=(ca-certificates)
-
   if [ ${#need[@]} -gt 0 ]; then
     export DEBIAN_FRONTEND=noninteractive
     wait_apt
@@ -59,7 +56,6 @@ tmp_tar="/tmp/${REPO_NAME}.tar.gz"
 curl -fL --progress-bar "$GH_TARBALL_URL" -o "$tmp_tar"
 tar -xzf "$tmp_tar" -C /tmp
 
-# detecta pasta extraída (*-main)
 SRC_DIR="$(find /tmp -maxdepth 1 -type d -name "${REPO_NAME}-*-${REPO_BRANCH}" -print -quit)"
 if [ -z "${SRC_DIR:-}" ]; then
   SRC_DIR="$(find /tmp -maxdepth 1 -type d -name "*-${REPO_BRANCH}" -print -quit)"
@@ -68,18 +64,18 @@ fi
 
 cp -R "${SRC_DIR}/." "$ROOT/"
 
-# normaliza CRLF -> LF (evita 'unexpected end of file' em heredoc)
+# Normaliza CRLF -> LF (evita heredoc quebrado)
 if [ -d "$ROOT/scripts" ]; then
   find "$ROOT/scripts" -type f -name '*.sh' -print0 2>/dev/null | xargs -0 -r sed -i 's/\r$//'
 fi
 
-# permissões executáveis
+# Permissões
 if [ -d "$ROOT/scripts" ]; then
   chmod +x "$ROOT/scripts/"*.sh 2>/dev/null || true
   chmod +x "$ROOT/scripts"/*/*.sh 2>/dev/null || true
 fi
 
-# atalho opcional
+# Atalho
 if [ ! -e /usr/local/bin/setupforcoder ]; then
   ln -s "$ROOT/scripts/toolbox.sh" /usr/local/bin/setupforcoder || true
 fi
@@ -87,14 +83,25 @@ fi
 g "✔ SetupForcoder instalado em $ROOT"
 echo
 
-# ========= Garante TTY (quando rodou via pipe) =========
-if [ -e /dev/tty ]; then
-  exec </dev/tty >/dev/tty 2>&1
-else
-  y "Não foi possível anexar /dev/tty. Rode manualmente:"
-  echo "  bash $ROOT/scripts/toolbox.sh"
-  exit 0
+# ========= Executa o toolbox com TTY garantido =========
+# 1) Se já é TTY, vai direto
+if [ -t 0 ] && [ -t 1 ]; then
+  exec bash "$ROOT/scripts/toolbox.sh"
 fi
 
-# ========= Executa o toolbox =========
-exec bash "$ROOT/scripts/toolbox.sh"
+# 2) Tenta com 'script' para alocar pseudo-TTY (melhor opção em pipe)
+if command -v script >/dev/null 2>&1; then
+  # -q (quiet), -f (flush), -c "cmd" (comando), log em /dev/null
+  exec script -qfc "bash '$ROOT/scripts/toolbox.sh'" /dev/null
+fi
+
+# 3) Tenta setsid + /dev/tty (alguns ambientes permitem)
+if command -v setsid >/dev/null 2>&1 && [ -e /dev/tty ]; then
+  exec setsid -w bash -lc "exec bash '$ROOT/scripts/toolbox.sh' </dev/tty >/dev/tty 2>&1"
+fi
+
+# 4) Fallback: instrução manual
+y "Não foi possível anexar um TTY automaticamente."
+echo "Rode manualmente:"
+echo "  bash $ROOT/scripts/toolbox.sh"
+exit 0
