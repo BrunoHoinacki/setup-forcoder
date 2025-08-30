@@ -48,6 +48,8 @@ need_file "$ROOT/scripts/generaldocker.sh"
 need_file "$ROOT/scripts/generalgit.sh"
 need_file "$ROOT/scripts/mkbackup.sh"
 need_file "$ROOT/scripts/resetsetup.sh"
+# opcional:
+# [ -f "$ROOT/scripts/rbackupunbind.sh" ] || true
 
 # ===== Menu =====
 while true; do
@@ -95,4 +97,15 @@ BANNER
     6)  run "bash '$ROOT/scripts/generalgit.sh'" ;;
     7)  run "bash '$ROOT/scripts/mkbackup.sh'" ;;
     8)  run "(cd /opt/traefik && docker compose up -d)" ;;
-    9)  echo; echo "Pressione Ctrl+C para voltar ao menu..."; tail -
+    9)  echo; echo "Pressione Ctrl+C para voltar ao menu..."; tail -f /opt/traefik/logs/access.json ;;
+    10) run "bash '$ROOT/scripts/resetsetup.sh'" ;;
+    11) echo; docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}'; pause ;;
+    12) if [ -f "$ROOT/scripts/rbackupunbind.sh" ]; then
+          run "bash '$ROOT/scripts/rbackupunbind.sh'"
+        else
+          y "Script opcional ausente: $ROOT/scripts/rbackupunbind.sh"; pause
+        fi ;;
+    0)  exit 0 ;;
+    *)  r "Opção inválida."; sleep 1 ;;
+  esac
+done

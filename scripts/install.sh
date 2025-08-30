@@ -56,7 +56,6 @@ ensure_basics
 mkdir -p "$ROOT"
 
 tmp_tar="/tmp/${REPO_NAME}.tar.gz"
-# mostra progress bar, mas falha se erro (-f)
 curl -fL --progress-bar "$GH_TARBALL_URL" -o "$tmp_tar"
 tar -xzf "$tmp_tar" -C /tmp
 
@@ -68,6 +67,11 @@ fi
 [ -n "${SRC_DIR:-}" ] || die "Não foi possível localizar a pasta extraída do tarball."
 
 cp -R "${SRC_DIR}/." "$ROOT/"
+
+# normaliza CRLF -> LF (evita 'unexpected end of file' em heredoc)
+if [ -d "$ROOT/scripts" ]; then
+  find "$ROOT/scripts" -type f -name '*.sh' -print0 2>/dev/null | xargs -0 -r sed -i 's/\r$//'
+fi
 
 # permissões executáveis
 if [ -d "$ROOT/scripts" ]; then
@@ -83,9 +87,8 @@ fi
 g "✔ SetupForcoder instalado em $ROOT"
 echo
 
-# ========= Garante TTY (importante quando rodou via pipe) =========
+# ========= Garante TTY (quando rodou via pipe) =========
 if [ -e /dev/tty ]; then
-  # reanexa stdin/stdout/stderr ao terminal real
   exec </dev/tty >/dev/tty 2>&1
 else
   y "Não foi possível anexar /dev/tty. Rode manualmente:"
