@@ -25,79 +25,35 @@ run(){
   pause
 }
 
-# ===== Config =====
-ROOT="/opt/setup-forcoder"
-REPO_OWNER="BrunoHoinacki"
-REPO_NAME="setup-forcoder"
-REPO_BRANCH="main"
-GH_TARBALL_URL="https://github.com/${REPO_OWNER}/${REPO_NAME}/archive/refs/heads/${REPO_BRANCH}.tar.gz"
+# ===== Resolve ROOT =====
+# 1) se o toolbox está dentro do repo, usa o pai do diretório atual
+# 2) fallback para /opt/setup-forcoder
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "$SCRIPT_DIR/.." 2>/dev/null && pwd || echo "/opt/setup-forcoder")"
 
-# ===== Funções internas =====
-have(){ command -v "$1" >/dev/null 2>&1; }
+# ===== Sanity check =====
+need_file(){ [ -f "$1" ] || die "Arquivo não encontrado: $1"; }
+need_dir(){  [ -d "$1" ] || die "Diretório não encontrado: $1"; }
 
-wait_apt(){
-  local locks=(/var/lib/dpkg/lock-frontend /var/lib/apt/lists/lock)
-  local msg_shown=0
-  while :; do
-    local busy=0
-    for L in "${locks[@]}"; do
-      if fuser "$L" >/dev/null 2>&1; then busy=1; fi
-    done
-    if [ $busy -eq 0 ]; then break; fi
-    if [ $msg_shown -eq 0 ]; then y "⏳ APT em uso; aguardando liberar..."; msg_shown=1; fi
-    sleep 3
-  done
-}
-
-ensure_basics(){
-  local need=()
-  have curl || need+=(curl)
-  have unzip || need+=(unzip)
-  have tar || need+=(tar)
-  [ -f /etc/ssl/certs/ca-certificates.crt ] || need+=(ca-certificates)
-
-  if [ ${#need[@]} -gt 0 ]; then
-    export DEBIAN_FRONTEND=noninteractive
-    wait_apt
-    apt-get update -y
-    apt-get install -y --no-install-recommends "${need[@]}"
-  fi
-}
-
-# ===== Bootstrap =====
 if [ ! -d "$ROOT/scripts" ]; then
-  b "==> SetupForcoder não encontrado. Preparando ambiente inicial..."
-
-  ensure_basics
-  mkdir -p "$ROOT"
-
-  # baixa última versão do GitHub (branch main)
-  tmp_tar="/tmp/${REPO_NAME}.tar.gz"
-  curl -fsSL "$GH_TARBALL_URL" -o "$tmp_tar"
-  tar -xzf "$tmp_tar" -C /tmp
-
-  # detecta diretório extraído (qualquer nome-*-main)
-  SRC_DIR="$(find /tmp -maxdepth 1 -type d -name "${REPO_NAME}-*-${REPO_BRANCH}" -print -quit)"
-  if [ -z "${SRC_DIR:-}" ]; then
-    SRC_DIR="$(find /tmp -maxdepth 1 -type d -name "*-${REPO_BRANCH}" -print -quit)"
-  fi
-  [ -n "${SRC_DIR:-}" ] || die "Não foi possível localizar pasta extraída do tarball."
-
-  cp -R "${SRC_DIR}/." "$ROOT/"
-
-  # permissões de execução
-  if [ -d "$ROOT/scripts" ]; then
-    chmod +x "$ROOT/scripts/"*.sh 2>/dev/null || true
-    chmod +x "$ROOT/scripts"/*/*.sh 2>/dev/null || true
-  fi
-
-  # atalho opcional
-  if [ ! -e /usr/local/bin/setupforcoder ]; then
-    ln -s "$ROOT/scripts/toolbox.sh" /usr/local/bin/setupforcoder || true
-  fi
-
-  b "==> SetupForcoder instalado em $ROOT"
+  r "Diretório de scripts não encontrado em: $ROOT/scripts"
+  echo
+  y "Instale com 1 comando:"
+  echo "  curl -fsSL https://raw.githubusercontent.com/BrunoHoinacki/setup-forcoder/main/scripts/install.sh | sudo bash"
+  exit 1
 fi
+
+# exige os principais scripts (responsabilidades do toolbox)
+need_file "$ROOT/scripts/setup.sh"
+need_file "$ROOT/scripts/mkclient.sh"
+need_file "$ROOT/scripts/delclient.sh"
+need_file "$ROOT/scripts/delallclients.sh"
+need_file "$ROOT/scripts/generaldocker.sh"
+need_file "$ROOT/scripts/generalgit.sh"
+need_file "$ROOT/scripts/mkbackup.sh"
+need_file "$ROOT/scripts/resetsetup.sh"
+# scripts opcionais não quebram o menu se faltarem
+# [ -f "$ROOT/scripts/rbackupunbind.sh" ] || true
 
 # ===== Menu =====
 while true; do
@@ -129,7 +85,7 @@ BANNER
   g "  9) Logs do Traefik (access.json tail -f)  [Ctrl+C para voltar]"
   y " 10) Reset da infra base (resetsetup.sh)"
   g " 11) Status dos containers (docker ps)"
-  g " 12) Desfazer binds (rbackupunbind.sh)"
+  g " 12) Desfazer binds (rbackupunbind.sh) [opcional]"
   r "  0) Sair"
   echo ""
   echo -e "\033[90m──────────────────────────────────────────────\033[0m"
@@ -148,7 +104,11 @@ BANNER
     9)  echo; echo "Pressione Ctrl+C para voltar ao menu..."; tail -f /opt/traefik/logs/access.json ;;
     10) run "bash '$ROOT/scripts/resetsetup.sh'" ;;
     11) echo; docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}'; pause ;;
-    12) run "bash '$ROOT/scripts/rbackupunbind.sh'" ;;
+    12) if [ -f "$ROOT/scripts/rbackupunbind.sh" ]; then
+          run "bash '$ROOT/scripts/rbackupunbind.sh'"
+        else
+          y "Script opcional ausente: $ROOT/scripts/rbackupunbind.sh"; pause
+        fi ;;
     0)  exit 0 ;;
     *)  r "Opção inválida."; sleep 1 ;;
   esac
