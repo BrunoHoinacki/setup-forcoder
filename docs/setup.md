@@ -173,7 +173,7 @@ Responda às perguntas. O script só prossegue no teste do GitHub após você **
 Com o Traefik pronto, crie stacks de cliente/projeto com:
 
 ```bash
-bash /opt/devops-stack/scripts/mkclient.sh
+bash /opt/setup-forcoder/scripts/mkclient.sh
 ```
 
 A documentação do `mkclient.sh` está em [docs/mkclient.md](mkclient.md).

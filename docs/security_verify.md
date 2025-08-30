@@ -28,8 +28,8 @@ Após provisionar a **infraestrutura** ou um **novo projeto** com o setup, execu
   
   **Procure por estas regras NAT:**
   ```
-  DNAT  tcp  --  !br-xxxxx *  0.0.0.0/0  0.0.0.0/0  tcp dpt:80 to:172.18.0.2:80
-  DNAT  tcp  --  !br-xxxxx *  0.0.0.0/0  0.0.0.0/0  tcp dpt:443 to:172.18.0.2:443
+  DNAT  tcp  --  !br-xxxxx *  0.0.0.0/0  0.0.0.0/0  tcp dpt:80 to:182.18.0.2:80
+  DNAT  tcp  --  !br-xxxxx *  0.0.0.0/0  0.0.0.0/0  tcp dpt:443 to:182.18.0.2:443
   ```
 
 ---
@@ -77,9 +77,9 @@ Após provisionar a **infraestrutura** ou um **novo projeto** com o setup, execu
   **Verificar se todos os containers necessários estão conectados:**
   ```json
   "Containers": {
-    "traefik": {"IPv4Address": "172.18.0.2/16"},
-    "nginx": {"IPv4Address": "172.18.0.4/16"},
-    "phpmyadmin": {"IPv4Address": "172.18.0.3/16"}
+    "traefik": {"IPv4Address": "182.18.0.2/16"},
+    "nginx": {"IPv4Address": "182.18.0.4/16"},
+    "phpmyadmin": {"IPv4Address": "182.18.0.3/16"}
   }
   ```
 
@@ -151,13 +151,13 @@ Após provisionar a **infraestrutura** ou um **novo projeto** com o setup, execu
   
   **Exemplo:**
   ```
-  72.60.57.232
+  82.65.87.232
   ```
   
   📝 **Nota:** Se usar Cloudflare Proxy, aparecerão IPs do Cloudflare (normal).
   ```
-  104.21.68.38
-  172.67.186.81
+  151.21.68.38
+  182.67.186.81
   ```
 
 - [ ] **Testar conexão HTTPS:**

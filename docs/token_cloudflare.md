@@ -8,7 +8,7 @@ Cloudflare Dashboard → **(avatar, canto superior direito) My Profile** → **A
   * (opcional, mas útil) *Zone* → **Zone** → **Read**
 * **Zone Resources:**
 
-  * Include → **Specific zone** → selecione a zona do seu domínio (ex.: `medialinesistemas.com.br`)
+  * Include → **Specific zone** → selecione a zona do seu domínio (ex.: `forcoder.com.br`)
 * **Continue to summary** → **Create Token** → **Copy** (guarde esse valor; é o `CF_DNS_API_TOKEN`).
 
 > Dica: sempre use **API Token** (escopo mínimo), não a Global API Key.
