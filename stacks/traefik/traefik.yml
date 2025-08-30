@@ -1,9 +1,0 @@
-# traefik.yml — config estática extra (mínima)
-log:
-  level: INFO
-
-api:
-  dashboard: true
-
-serversTransport:
-  insecureSkipVerify: true
