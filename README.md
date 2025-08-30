@@ -16,7 +16,7 @@ DNS → VPS (80/443) → Traefik → Nginx do projeto → PHP-FPM do projeto →
 Na sua VPS Ubuntu/Debian (como **root**):
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/BrunoHoinacki/setupforcoder/main/scripts/toolbox.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/BrunoHoinacki/setup-forcoder/main/scripts/toolbox.sh)
 ```
 
 Isso irá baixar o **toolbox** e iniciar o menu interativo para provisionar toda a infra.
