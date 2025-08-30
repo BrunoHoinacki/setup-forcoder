@@ -33,8 +33,13 @@ rm -rf /tmp/setup-forcoder-main
 chmod +x "$ROOT"/scripts/*.sh
 
 # ========= Atalho =========
-ln -sf "$ROOT/scripts/toolbox.sh" /usr/local/bin/setupforcoder
+cat > /usr/local/bin/setupforcoder << 'EOF'
+#!/bin/bash
+exec /opt/setup-forcoder/scripts/toolbox.sh "$@"
+EOF
+chmod +x /usr/local/bin/setupforcoder
 
 echo -e "\033[1;32m✓ SetupForcoder instalado!\033[0m"
 echo
 echo -e "\033[1;33mPara usar, digite: setupforcoder\033[0m"
+echo -e "\033[1;33mOu diretamente: /opt/setup-forcoder/scripts/toolbox.sh\033[0m"
