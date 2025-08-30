@@ -9,7 +9,7 @@ r(){ echo -e "\033[1;31m$*\033[0m"; }   # vermelho
 die(){ r "[ERR] $*"; exit 1; }
 
 # ========= Guardas =========
-[ "${EUID:-$(id -u)}" -eq 0 ] || die "Execute como root: sudo bash -c \"$(curl -fsSL .../install.sh)\""
+[ "${EUID:-$(id -u)}" -eq 0 ] || die "Execute como root. Ex.:  curl -fsSL https://raw.githubusercontent.com/BrunoHoinacki/setup-forcoder/main/scripts/install.sh | sudo bash"
 
 # ========= Config =========
 ROOT="/opt/setup-forcoder"
@@ -22,7 +22,6 @@ GH_TARBALL_URL="https://github.com/${REPO_OWNER}/${REPO_NAME}/archive/refs/heads
 have(){ command -v "$1" >/dev/null 2>&1; }
 
 wait_apt() {
-  # espera locks do APT sumirem (VPS recém-criada)
   local locks=(/var/lib/dpkg/lock-frontend /var/lib/apt/lists/lock)
   local showed=0
   while :; do
@@ -57,7 +56,8 @@ ensure_basics
 mkdir -p "$ROOT"
 
 tmp_tar="/tmp/${REPO_NAME}.tar.gz"
-curl -fsSL "$GH_TARBALL_URL" -o "$tmp_tar"
+# mostra progress bar, mas falha se erro (-f)
+curl -fL --progress-bar "$GH_TARBALL_URL" -o "$tmp_tar"
 tar -xzf "$tmp_tar" -C /tmp
 
 # detecta pasta extraída (*-main)
@@ -82,6 +82,16 @@ fi
 
 g "✔ SetupForcoder instalado em $ROOT"
 echo
+
+# ========= Garante TTY (importante quando rodou via pipe) =========
+if [ -e /dev/tty ]; then
+  # reanexa stdin/stdout/stderr ao terminal real
+  exec </dev/tty >/dev/tty 2>&1
+else
+  y "Não foi possível anexar /dev/tty. Rode manualmente:"
+  echo "  bash $ROOT/scripts/toolbox.sh"
+  exit 0
+fi
 
 # ========= Executa o toolbox =========
 exec bash "$ROOT/scripts/toolbox.sh"

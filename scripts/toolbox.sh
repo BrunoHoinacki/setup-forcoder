@@ -26,14 +26,11 @@ run(){
 }
 
 # ===== Resolve ROOT =====
-# 1) se o toolbox está dentro do repo, usa o pai do diretório atual
-# 2) fallback para /opt/setup-forcoder
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." 2>/dev/null && pwd || echo "/opt/setup-forcoder")"
 
 # ===== Sanity check =====
 need_file(){ [ -f "$1" ] || die "Arquivo não encontrado: $1"; }
-need_dir(){  [ -d "$1" ] || die "Diretório não encontrado: $1"; }
 
 if [ ! -d "$ROOT/scripts" ]; then
   r "Diretório de scripts não encontrado em: $ROOT/scripts"
@@ -43,7 +40,6 @@ if [ ! -d "$ROOT/scripts" ]; then
   exit 1
 fi
 
-# exige os principais scripts (responsabilidades do toolbox)
 need_file "$ROOT/scripts/setup.sh"
 need_file "$ROOT/scripts/mkclient.sh"
 need_file "$ROOT/scripts/delclient.sh"
@@ -52,8 +48,6 @@ need_file "$ROOT/scripts/generaldocker.sh"
 need_file "$ROOT/scripts/generalgit.sh"
 need_file "$ROOT/scripts/mkbackup.sh"
 need_file "$ROOT/scripts/resetsetup.sh"
-# scripts opcionais não quebram o menu se faltarem
-# [ -f "$ROOT/scripts/rbackupunbind.sh" ] || true
 
 # ===== Menu =====
 while true; do
@@ -101,15 +95,4 @@ BANNER
     6)  run "bash '$ROOT/scripts/generalgit.sh'" ;;
     7)  run "bash '$ROOT/scripts/mkbackup.sh'" ;;
     8)  run "(cd /opt/traefik && docker compose up -d)" ;;
-    9)  echo; echo "Pressione Ctrl+C para voltar ao menu..."; tail -f /opt/traefik/logs/access.json ;;
-    10) run "bash '$ROOT/scripts/resetsetup.sh'" ;;
-    11) echo; docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}'; pause ;;
-    12) if [ -f "$ROOT/scripts/rbackupunbind.sh" ]; then
-          run "bash '$ROOT/scripts/rbackupunbind.sh'"
-        else
-          y "Script opcional ausente: $ROOT/scripts/rbackupunbind.sh"; pause
-        fi ;;
-    0)  exit 0 ;;
-    *)  r "Opção inválida."; sleep 1 ;;
-  esac
-done
+    9)  echo; echo "Pressione Ctrl+C para voltar ao menu..."; tail -
