@@ -1,4 +1,4 @@
-# 🚀 Infraestrutura Multi-Cliente com Traefik + Docker
+# 🚀 SetupForcoder — Infraestrutura Multi-Cliente com Traefik + Docker
 
 Este repositório monta uma **infraestrutura multi-cliente** em uma VPS usando **Docker** e **Traefik** como proxy reverso com **SSL automático (Let’s Encrypt)**.
 Cada cliente tem seu **próprio domínio** e uma stack isolada (ex.: **Laravel + PHP-FPM + Nginx**). Opcionalmente, os projetos podem usar um **MySQL central** com **phpMyAdmin**.
@@ -11,27 +11,21 @@ DNS → VPS (80/443) → Traefik → Nginx do projeto → PHP-FPM do projeto →
 
 ---
 
-## ⚡ Uso em 1 comando com `toolbox.sh` (recomendado)
+## ⚡ Instalação em 1 comando
 
-O **toolbox** é um menu interativo que orquestra todos os scripts desta infra (setup inicial, provisionamento, remoções, utilitários e backups).
-
-### Primeira execução (instalação da infra na VPS)
-
-Como o repo é privado, envie-o para a VPS e rode o toolbox:
+Na sua VPS Ubuntu/Debian (como **root**):
 
 ```bash
-# na sua máquina
-scp -r ./ root@SEU_IP:/opt/devops-stack/
-
-# na VPS
-ssh root@SEU_IP
-cd /opt/devops-stack
-bash scripts/toolbox.sh
+bash <(curl -fsSL https://raw.githubusercontent.com/BrunoHoinacki/setupforcoder/main/scripts/toolbox.sh)
 ```
+
+Isso irá baixar o **toolbox** e iniciar o menu interativo para provisionar toda a infra.
 
 No menu, escolha **“1) Setup inicial da VPS”** para subir o **Traefik** (com HTTPS), criar redes `proxy/db`, proteger o dashboard e, opcionalmente, instalar **MySQL + phpMyAdmin**.
 
-### Principais opções do toolbox
+---
+
+## ⚙️ Principais opções do toolbox
 
 1. **Setup inicial da VPS** (Traefik + redes + opcional MySQL/PMA)
 2. **Provisionar cliente/projeto** (`mkclient.sh`)
@@ -58,41 +52,16 @@ Como criar o token: **[docs/token\_cloudflare.md](docs/token_cloudflare.md)**
 
 ---
 
-## 📦 O que está pronto
+## 📦 Scripts inclusos
 
-### `scripts/setup.sh` — Setup inicial da VPS
-
-Prepara a **infra base** em `/opt/traefik`, sobe o **Traefik** (HTTPS automático), cria as redes `proxy`/`db`, protege o **dashboard** e, opcionalmente, instala **MySQL + phpMyAdmin**.
-📖 Detalhes: [docs/setup.md](docs/setup.md)
-
-### `scripts/mkclient.sh` — Provisionamento de projetos
-
-Cria a stack de um **cliente/projeto** em `/home/<cliente>/<projeto>`, integrada ao Traefik existente (Nginx + PHP-FPM; SQLite ou MySQL).
-📖 Detalhes: [docs/mkclient.md](docs/mkclient.md)
-
-### `scripts/delclient.sh` — Remover um projeto
-
-Remove **um projeto** (derruba containers, apaga pasta e opcionalmente **DROP DATABASE/USER**).
-
-### `scripts/delallclients.sh` — Remover TODOS os projetos
-
-Remove **todos os projetos de todos os clientes** (mesma lógica do `delclient.sh`, porém em lote).
-
-### `scripts/generaldocker.sh` — Utilitários Docker/Compose
-
-Menu para `ps`, `up -d`, `down`, `restart`, `logs -f`, `rebuild`, `shell`, `artisan`, `optimize:clear`, **fix perms**, etc.
-
-### `scripts/generalgit.sh` — Utilitários Git
-
-Menu para `status`, `fetch`, `pull`, `log --oneline`, `branches`, `changed files`.
-
-### `scripts/mkbackup.sh` — Backup de projetos
-
-Gera `.zip` em `/opt/backups/<cliente>/<projeto>/` (código + `dump.sql.gz` ou `database.sqlite`).
-
-### `scripts/resetsetup.sh` — Reset da infra base
-
-Derruba Traefik/MySQL/PMA, remove `/opt/traefik` (inclui ACME) e redes `proxy/db` se vazias.
+* `scripts/setup.sh` — Setup inicial da VPS
+* `scripts/mkclient.sh` — Provisionamento de projetos
+* `scripts/delclient.sh` — Remove um projeto
+* `scripts/delallclients.sh` — Remove todos os projetos
+* `scripts/generaldocker.sh` — Utilitários Docker/Compose
+* `scripts/generalgit.sh` — Utilitários Git
+* `scripts/mkbackup.sh` — Backup de projetos
+* `scripts/resetsetup.sh` — Reset da infra base
 
 ---
 
@@ -100,45 +69,34 @@ Derruba Traefik/MySQL/PMA, remove `/opt/traefik` (inclui ACME) e redes `proxy/db
 
 * VPS Ubuntu/Debian com acesso root (ou `sudo`).
 * DNS do **domínio do dashboard** apontando em **A/AAAA** para o IP da VPS.
-* Repositório privado enviado via **SCP/rsync/SFTP**.
 * (Opcional) Chave SSH no GitHub (para projetos privados usados pelo `mkclient.sh`).
 
 ---
 
-## 🧱 Provisionar um novo cliente/projeto (via toolbox)
+## 🧱 Provisionar um novo cliente/projeto
 
 ```bash
-bash /opt/devops-stack/scripts/toolbox.sh
+bash /opt/setupforcoder/scripts/toolbox.sh
 # opção 2: Provisionar cliente/projeto
 ```
 
-> O `mkclient.sh` detecta Laravel e faz pós-instalação; integra labels/middlewares do Traefik automaticamente.
+O `mkclient.sh` detecta Laravel e faz pós-instalação; integra labels/middlewares do Traefik automaticamente.
 
 ---
 
 ## 🔧 Operações do dia a dia (via toolbox)
 
-* **Docker** (logs, restart, shell, artisan, fix perms): opção **5**
-* **Git** (pull, log, status): opção **6**
-* **Backup**: opção **7**
-* **Recriar/Sobe Traefik**: opção **8**
-* **Logs do Traefik**: opção **9**
-
----
-
-## 🧰 Troubleshooting
-
-* **SSL não emite (HTTP-01)** → DNS A/AAAA correto e **DNS cinza** até emitir.
-* **SSL não emite (DNS-01)** → conferir **API Token** e permissões “DNS Edit”.
-* **phpMyAdmin** → acesse com **barra final** `/phpmyadmin/`.
-* **Portas 80/443 ocupadas** → `systemctl disable --now apache2 nginx`.
-* **Ver logs do Traefik** → `docker logs -f traefik` e `tail -f /opt/traefik/logs/access.json`.
+* **Docker** (logs, restart, shell, artisan, fix perms) → opção 5
+* **Git** (pull, log, status) → opção 6
+* **Backup** → opção 7
+* **Recriar/Sobe Traefik** → opção 8
+* **Logs do Traefik** → opção 9
 
 ---
 
 ## 🔐 Segurança & Backups
 
-Backups recomendados:
+Recomenda-se backup de:
 
 * `/opt/traefik/letsencrypt/acme.json` (certificados)
 * `/home/<cliente>/<projeto>/` (código + assets)
@@ -155,9 +113,9 @@ Boas práticas:
 
 ## 🛡️ Checklist de Verificação (pós-instalação)
 
-Após provisionar a **infra** ou um **novo projeto**, recomendamos executar um checklist rápido de segurança para validar portas abertas, regras de firewall, configuração de SSH e containers expostos.
+Após provisionar a infra ou um novo projeto, execute um checklist rápido de segurança para validar portas abertas, regras de firewall, configuração de SSH e containers expostos.
 
-📖 Veja o guia completo: [docs/security_verify.md](docs/security_verify.md)
+📖 Veja o guia completo: [docs/security\_verify.md](docs/security_verify.md)
 
 ---
 
@@ -171,14 +129,9 @@ Após provisionar a **infra** ou um **novo projeto**, recomendamos executar um c
 
 ---
 
-## ✅ Resumo
+## 📜 Licença
 
-* **`toolbox.sh`** → **1 comando** para instalar, operar e manter a infra.
-* `setup.sh` → sobe Traefik + SSL + MySQL opcional.
-* `mkclient.sh` → provisiona projetos isolados.
-* `delclient.sh` / `delallclients.sh` → removem projetos.
-* `generaldocker.sh` / `generalgit.sh` → utilitários do dia a dia.
-* `mkbackup.sh` → gera backups.
-* `resetsetup.sh` → reseta a infra base.
+Distribuído sob a **MIT License**.
+Veja o arquivo [`LICENSE.txt`](LICENSE.txt).
 
 ---

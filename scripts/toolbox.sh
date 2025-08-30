@@ -7,9 +7,11 @@ g(){ echo -e "\033[1;32m$*\033[0m"; }   # verde
 y(){ echo -e "\033[1;33m$*\033[0m"; }   # amarelo
 r(){ echo -e "\033[1;31m$*\033[0m"; }   # vermelho
 die(){ r "[ERR] $*"; exit 1; }
-pause(){ echo; read -n1 -s -r -p "Pressione qualquer tecla para voltar ao menu..."; echo; }
 
-# executa comando e mantém a tela (sem matar o toolbox se o comando falhar)
+need_root(){ [ "${EUID:-$(id -u)}" -eq 0 ] || die "Execute como root (sudo su)."; }
+need_root
+
+pause(){ echo; read -n1 -s -r -p "Pressione qualquer tecla para voltar ao menu..."; echo; }
 run(){
   local cmd="$*"
   echo
@@ -23,10 +25,55 @@ run(){
   pause
 }
 
-ROOT="/opt/devops-stack"
-need_root(){ [ "${EUID:-$(id -u)}" -eq 0 ] || die "Execute como root (sudo su)."; }
-need_root
+# ===== Config =====
+ROOT="/opt/setup-forcoder"
+REPO_OWNER="BrunoHoinacki"
+REPO_NAME="setup-forcoder"
+REPO_BRANCH="main"
+GH_TARBALL_URL="https://github.com/${REPO_OWNER}/${REPO_NAME}/archive/refs/heads/${REPO_BRANCH}.tar.gz"
 
+# ===== Bootstrap =====
+if [ ! -d "$ROOT/scripts" ]; then
+  b "==> SetupForcoder não encontrado. Preparando ambiente inicial..."
+
+  # garante pacotes básicos
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update -y
+  apt-get install -y curl unzip tar ca-certificates
+
+  mkdir -p "$ROOT"
+
+  # baixa última versão do GitHub (branch main)
+  tmp_tar="/tmp/${REPO_NAME}.tar.gz"
+  curl -fsSL "$GH_TARBALL_URL" -o "$tmp_tar"
+  tar -xzf "$tmp_tar" -C /tmp
+
+  # detecta diretório extraído (qualquer nome-*-main)
+  SRC_DIR="$(find /tmp -maxdepth 1 -type d -name "${REPO_NAME}-*-${REPO_BRANCH}" -print -quit)"
+  if [ -z "${SRC_DIR:-}" ]; then
+    # fallback: primeira pasta *-main
+    SRC_DIR="$(find /tmp -maxdepth 1 -type d -name "*-${REPO_BRANCH}" -print -quit)"
+  fi
+  [ -n "${SRC_DIR:-}" ] || die "Não foi possível localizar pasta extraída do tarball."
+
+  # copia conteúdo para /opt/setupforcoder
+  cp -R "${SRC_DIR}/." "$ROOT/"
+
+  # garante permissão de execução nos scripts
+  if [ -d "$ROOT/scripts" ]; then
+    chmod +x "$ROOT/scripts/"*.sh 2>/dev/null || true
+    chmod +x "$ROOT/scripts"/*/*.sh 2>/dev/null || true
+  fi
+
+  # cria atalho opcional
+  if [ ! -e /usr/local/bin/setupforcoder ]; then
+    ln -s "$ROOT/scripts/toolbox.sh" /usr/local/bin/setupforcoder || true
+  fi
+
+  b "==> SetupForcoder instalado em $ROOT"
+fi
+
+# ===== Menu =====
 while true; do
   clear
   cat <<'BANNER'
@@ -38,7 +85,9 @@ while true; do
 ╚═════╝ ╚══════╝  ╚═══╝   ╚═════╝ ╚═╝     ╚══════╝
 BANNER
 
-  b "==> STACK TOOLBOX"
+  b "==> SETUP FORCODER <=="
+  b "by Bruno Hoinacki"
+  b "https://github.com/BrunoHoinacki/setup-forcoder"
   echo -e "\033[90m──────────────────────────────────────────────\033[0m"
   echo ""
   g "  1) Setup inicial da VPS (Traefik + redes + opcional MySQL/PMA)"
