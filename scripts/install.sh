@@ -15,6 +15,7 @@ ROOT="/opt/setup-forcoder"
 URL="https://github.com/BrunoHoinacki/setup-forcoder/archive/refs/heads/main.tar.gz"
 
 # ========= Instala dependências básicas =========
+export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y curl tar unzip ca-certificates
 
@@ -30,16 +31,27 @@ mv /tmp/setup-forcoder-main/* "$ROOT/"
 rm -rf /tmp/setup-forcoder-main
 
 # ========= Permissões =========
-chmod +x "$ROOT"/scripts/*.sh
+find "$ROOT" -name "*.sh" -type f -exec chmod +x {} \;
 
-# ========= Atalho =========
+# ========= Atalho CORRETO =========
 cat > /usr/local/bin/setupforcoder << 'EOF'
 #!/bin/bash
-exec /opt/setup-forcoder/scripts/toolbox.sh "$@"
+exec bash /opt/setup-forcoder/scripts/toolbox.sh "$@"
 EOF
 chmod +x /usr/local/bin/setupforcoder
 
-echo -e "\033[1;32m✓ SetupForcoder instalado!\033[0m"
+echo -e "\033[1;32m✓ SetupForcoder instalado com sucesso!\033[0m"
 echo
-echo -e "\033[1;33mPara usar, digite: setupforcoder\033[0m"
-echo -e "\033[1;33mOu diretamente: /opt/setup-forcoder/scripts/toolbox.sh\033[0m"
+echo -e "\033[1;33mPara usar, execute qualquer um dos comandos:\033[0m"
+echo -e "\033[1;32m  setupforcoder\033[0m"
+echo -e "\033[1;32m  bash /opt/setup-forcoder/scripts/toolbox.sh\033[0m"
+echo
+
+# ========= Executa automaticamente se possível =========
+if [ -t 0 ] && [ -t 1 ]; then
+    echo -e "\033[1;36mIniciando toolbox automaticamente...\033[0m"
+    sleep 1
+    exec bash "$ROOT/scripts/toolbox.sh"
+else
+    echo -e "\033[1;33mExecute um dos comandos acima para abrir o toolbox.\033[0m"
+fi
