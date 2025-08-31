@@ -117,8 +117,29 @@ backup_project(){
   # Verifica se zip está instalado
   if ! command -v zip >/dev/null 2>&1; then
     warn "'zip' não encontrado"
-    log "ERRO: 'zip' não encontrado"
-    return 1
+    log "ERRO: 'zip' não encontrado. Tentando instalar automaticamente..."
+
+    # Detecta o gerenciador de pacotes e tenta instalar
+    if command -v apt-get >/dev/null 2>&1; then
+      sudo apt-get update && sudo apt-get install -y zip
+    elif command -v yum >/dev/null 2>&1; then
+      sudo yum install -y zip
+    elif command -v dnf >/dev/null 2>&1; then
+      sudo dnf install -y zip
+    elif command -v pacman >/dev/null 2>&1; then
+      sudo pacman -Sy zip
+    else
+      warn "Não foi possível detectar o gerenciador de pacotes automaticamente."
+      log "Por favor, instale o 'zip' manualmente. Exemplo: sudo apt-get install zip"
+      return 1
+    fi
+
+    # Verifica novamente se zip foi instalado
+    if ! command -v zip >/dev/null 2>&1; then
+      warn "'zip' ainda não está disponível após tentativa de instalação."
+      log "Por favor, instale o 'zip' manualmente e tente novamente."
+      return 1
+    fi
   fi
   
   # Cria diretório temporário
