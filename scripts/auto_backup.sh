@@ -148,9 +148,28 @@ backup_project(){
   local stage="${tmp}/stage"
   mkdir -p "$stage"
   
+  # Diretórios/padrões a excluir por padrão
+  local default_excludes=(
+    --exclude='./vendor'
+    --exclude='./node_modules'
+    --exclude='./.git'
+    --exclude='./.cache'
+    --exclude='./build'
+    --exclude='./dist'
+  )
+
+  # Permite exclusões adicionais via variável de ambiente AUTO_BACKUP_EXCLUDES (separadas por vírgula)
+  local extra_excludes=()
+  if [ -n "$AUTO_BACKUP_EXCLUDES" ]; then
+    IFS=',' read -ra user_excludes <<< "$AUTO_BACKUP_EXCLUDES"
+    for pattern in "${user_excludes[@]}"; do
+      extra_excludes+=(--exclude="$pattern")
+    done
+  fi
+
   # Copia APENAS o conteúdo de src/ para staging (mantém estrutura e ocultos)
-  # Exclui pastas pesadas por padrão
-  ( cd "$src_dir" && tar -cf - . --exclude='./vendor' --exclude='./node_modules' --exclude='./.git' ) | ( cd "$stage" && tar -xf - )
+  # Exclui pastas pesadas por padrão e permite exclusões configuráveis
+  ( cd "$src_dir" && tar -cf - . "${default_excludes[@]}" "${extra_excludes[@]}" ) | ( cd "$stage" && tar -xf - )
   
   # Verifica DB e gera dump.sql.gz se MySQL/MariaDB
   local env_path="${src_dir}/.env"
