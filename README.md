@@ -1,5 +1,7 @@
 # 🚀 SetupForcoder — Infraestrutura Multi-Cliente com Traefik + Docker
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 Este repositório monta uma **infraestrutura multi-cliente** em uma VPS usando **Docker** e **Traefik** como proxy reverso com **SSL automático (Let’s Encrypt)**.
 Cada cliente tem seu **próprio domínio** e uma stack isolada (ex.: **Laravel + PHP-FPM + Nginx**). Opcionalmente, os projetos podem usar um **MySQL central** com **phpMyAdmin**.
 
