@@ -1,5 +1,8 @@
 # Como gerar e vincular sua chave SSH ao GitHub
 
+> ⚡ **Nota**: o script de setup do **SetupForcoder** já cria e vincula automaticamente uma chave SSH ao GitHub (se necessário, durante o provisionamento).
+> Porém, caso prefira fazer manualmente, ou precise ajustar em outra máquina/usuário, siga o guia abaixo.
+
 Autenticar no GitHub via **SSH** permite clonar, dar **push/pull** com segurança sem digitar senha toda hora. Abaixo, o passo a passo enxuto.
 
 ## 1) Verifique se já existe uma chave
