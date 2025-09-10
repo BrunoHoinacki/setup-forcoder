@@ -151,7 +151,6 @@ Dicas rápidas:
 * `scripts/generaldocker.sh` — Utilitários Docker (Compose + Swarm)
 * `scripts/generalgit.sh` — Utilitários Git
 * `scripts/mkbackup.sh` — Backup de projetos (ZIP + dump SQL)
-* `scripts/mkrbackup.sh` — Mantém dumps disponíveis para `rsync` incremental
 * `scripts/resetsetup.sh` — Reset da infra base (remove stack traefik, redes overlay, e opcionalmente sai do Swarm)
 
 ---
