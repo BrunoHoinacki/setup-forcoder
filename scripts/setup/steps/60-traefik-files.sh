@@ -22,11 +22,11 @@ rm -f /opt/traefik/letsencrypt/acme.json
 touch /opt/traefik/letsencrypt/acme.json
 chmod 600 /opt/traefik/letsencrypt/acme.json
 
-# .env usado pelo docker stack deploy (Compose-style var subst)
+# .env com os MESMOS nomes usados no stack.yml
 cat >/opt/traefik/.env <<EOF
-LETSENCRYPT_EMAIL=${LE_EMAIL}
-TRAEFIK_DASHBOARD_DOMAIN=${DASH_DOMAIN}
-TZ=America/Sao_Paulo
+LETSENCRYPT_EMAIL=${LETSENCRYPT_EMAIL}
+TRAEFIK_DASHBOARD_DOMAIN=${TRAEFIK_DASHBOARD_DOMAIN}
+TZ=${TZ}
 CANONICAL_MW=${CANONICAL_MW}
 MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
 HTPASSWD_ESCAPED=${HTPASSWD_ESCAPED}
@@ -35,23 +35,20 @@ EOF
 ok ".env escrito em /opt/traefik/.env"
 
 # Middlewares dinâmicos (compress + security headers + canonical)
-# Definimos www-to-root e root-to-www no FILE PROVIDER
-# Atenção: usamos \$1 e \$2 para evitar expansão pelo shell.
+# Define www-to-root / root-to-www preservando o PATH
 cat >/opt/traefik/dynamic/middlewares.yml <<EOF
 http:
   middlewares:
-    # www -> root (preserva path)
     www-to-root:
       redirectRegex:
-        regex: "^https?://www\\.(.+)"
-        replacement: "https://\$1"
+        regex: "^https?://www\\.(.+?)(/.*)?$"
+        replacement: "https://\\1\\2"
         permanent: true
 
-    # root -> www (preserva path)
     root-to-www:
       redirectRegex:
-        regex: "^https?://(?!www\\.)([^/]+)(/.*)?$"
-        replacement: "https://www.\$1\$2"
+        regex: "^https?://([^/]+)(/.*)?$"
+        replacement: "https://www.\\1\\2"
         permanent: true
 
     canonical:

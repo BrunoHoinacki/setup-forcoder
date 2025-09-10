@@ -33,12 +33,11 @@ CANONICAL_MW="www-to-root"; [ "$CAN" = "2" ] && CANONICAL_MW="root-to-www"
 
 read -rp "Usuário BasicAuth do dashboard (default admin): " DASH_USER
 DASH_USER="${DASH_USER:-admin}"
-
-# Senha VISÍVEL (sem -s), conforme pedido
+# SEM -s: senha aparece para você conferir
 read -rp "Senha BasicAuth do dashboard: " DASH_PW
 [ -n "${DASH_PW:-}" ] || die "Senha é obrigatória."
 
-# Gera a linha do htpasswd e ESCAPA $ -> $$ para YAML/docker
+# Gera a linha htpasswd e ESCAPA $ -> $$ para YAML/docker
 HTPASSWD_ESCAPED="$(htpasswd_line "$DASH_USER" "$DASH_PW" | sed 's/\$/$$/g')"
 
 read -rp "Subir MySQL central + phpMyAdmin agora? [Y/n]: " USE_DB_STACK
@@ -46,10 +45,9 @@ USE_DB_STACK="${USE_DB_STACK:-Y}"
 
 MYSQL_ROOT_PASSWORD=""
 if [[ "${USE_DB_STACK^^}" == "Y" ]]; then
-  # Senha VISÍVEL (sem -s)
+  # SEM -s: senha aparece para você conferir
   read -rp "Senha do root do MySQL (vazio=gerar): " MYSQL_ROOT_PASSWORD
   if [[ -z "$MYSQL_ROOT_PASSWORD" ]]; then
-    # senha amigável p/ copiar (sem +=/), suficientemente aleatória
     if command -v openssl >/dev/null 2>&1; then
       MYSQL_ROOT_PASSWORD="$(openssl rand -base64 18 | tr -d '=+/')"
     else
@@ -76,7 +74,6 @@ MySQL root password       : ${MYSQL_ROOT_PASSWORD:-<n/a>}
 Timezone (Traefik)        : ${TZ}
 EOF
 
-# Log dedicado dos inputs (com segredos), conforme solicitado
 INPUT_LOG_DIR="/var/log/setup-forcoder-logs/setup"
 mkdir -p "$INPUT_LOG_DIR" 2>/dev/null || true
 INPUT_LOG_FILE="${INPUT_LOG_DIR}/inputs_$(date +%F_%H%M%S).log"
@@ -100,6 +97,10 @@ echo
 read -rp "Digite CONFIRM para aplicar estes valores: " _OK
 [[ "${_OK}" == "CONFIRM" ]] || die "Abortado pelo usuário."
 
-# Exporta para os próximos passos
+# Exports para os próximos passos
 export LE_EMAIL DASH_DOMAIN CF_DNS_API_TOKEN ACME_MODE CANONICAL_MW
 export DASH_USER DASH_PW HTPASSWD_ESCAPED USE_DB_STACK MYSQL_ROOT_PASSWORD TZ
+
+# Também exporta com os nomes usados no stack.yml:
+export LETSENCRYPT_EMAIL="$LE_EMAIL"
+export TRAEFIK_DASHBOARD_DOMAIN="$DASH_DOMAIN"
