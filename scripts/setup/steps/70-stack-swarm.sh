@@ -199,7 +199,7 @@ fi
 
 ok "stack.yml gerado em ${STACK_DIR}/stack.yml"
 echo "Pré-visualização (primeiras linhas):"
-nl -ba "${STACK_DIR}/stack.yml" | sed -n '1,120p' || true
+nl -ba "${STACK_DIR}/stack.yml" | sed -n '1,160p' || true
 
 echo "---- END STEP ${STEP_NO} (${STEP_NAME}) $(date -Iseconds) ----"
 # restaura FDs originais
