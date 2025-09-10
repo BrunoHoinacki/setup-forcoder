@@ -4,15 +4,15 @@
 
 b "==> Parâmetros"
 
-read -rp "E-mail para Let's Encrypt: " LE_EMAIL
-[ -n "${LE_EMAIL:-}" ] || die "E-mail é obrigatório."
+read -rp "E-mail para Let's Encrypt: " LETSENCRYPT_EMAIL
+[ -n "${LETSENCRYPT_EMAIL:-}" ] || die "E-mail é obrigatório."
 
-read -rp "Domínio do dashboard do Traefik (ex.: infra.seu-dominio.com.br): " DASH_DOMAIN
-[ -n "${DASH_DOMAIN:-}" ] || die "Domínio do dashboard é obrigatório."
+read -rp "Domínio do dashboard do Traefik (ex.: infra.seu-dominio.com.br): " TRAEFIK_DASHBOARD_DOMAIN
+[ -n "${TRAEFIK_DASHBOARD_DOMAIN:-}" ] || die "Domínio do dashboard é obrigatório."
 
 CF_USE_PROXY=0
 CF_DNS_API_TOKEN=""
-if ask_yes_no "Vai usar Cloudflare PROXY (nuvem laranja) para o dashboard (${DASH_DOMAIN})? [y/N]:" "N"; then
+if ask_yes_no "Vai usar Cloudflare PROXY (nuvem laranja) para o dashboard (${TRAEFIK_DASHBOARD_DOMAIN})? [y/N]:" "N"; then
   CF_USE_PROXY=1
   read -rp "Cloudflare API Token (DNS-01) [vazio = HTTP-01]: " CF_DNS_API_TOKEN
 fi
@@ -33,7 +33,7 @@ CANONICAL_MW="www-to-root"; [ "$CAN" = "2" ] && CANONICAL_MW="root-to-www"
 
 read -rp "Usuário BasicAuth do dashboard (default admin): " DASH_USER
 DASH_USER="${DASH_USER:-admin}"
-# SEM -s: senha aparece para você conferir
+# senha visível para evitar erro de colagem
 read -rp "Senha BasicAuth do dashboard: " DASH_PW
 [ -n "${DASH_PW:-}" ] || die "Senha é obrigatória."
 
@@ -45,7 +45,7 @@ USE_DB_STACK="${USE_DB_STACK:-Y}"
 
 MYSQL_ROOT_PASSWORD=""
 if [[ "${USE_DB_STACK^^}" == "Y" ]]; then
-  # SEM -s: senha aparece para você conferir
+  # senha visível para evitar erro de colagem
   read -rp "Senha do root do MySQL (vazio=gerar): " MYSQL_ROOT_PASSWORD
   if [[ -z "$MYSQL_ROOT_PASSWORD" ]]; then
     if command -v openssl >/dev/null 2>&1; then
@@ -62,8 +62,8 @@ TZ="America/Sao_Paulo"
 echo
 b "==> Resumo dos parâmetros (inclui segredos)"
 cat <<EOF
-Let's Encrypt e-mail      : ${LE_EMAIL}
-Dashboard domain          : ${DASH_DOMAIN}
+Let's Encrypt e-mail      : ${LETSENCRYPT_EMAIL}
+Dashboard domain          : ${TRAEFIK_DASHBOARD_DOMAIN}
 Cloudflare proxy          : $([ $CF_USE_PROXY -eq 1 ] && echo "YES" || echo "NO")
 ACME mode                 : ${ACME_MODE}
 Canonical middleware      : ${CANONICAL_MW}  (encadeado via canonical@file)
@@ -79,8 +79,8 @@ mkdir -p "$INPUT_LOG_DIR" 2>/dev/null || true
 INPUT_LOG_FILE="${INPUT_LOG_DIR}/inputs_$(date +%F_%H%M%S).log"
 {
   echo "---- INPUTS $(date -Iseconds) on $(hostname) ----"
-  echo "LE_EMAIL=${LE_EMAIL}"
-  echo "DASH_DOMAIN=${DASH_DOMAIN}"
+  echo "LETSENCRYPT_EMAIL=${LETSENCRYPT_EMAIL}"
+  echo "TRAEFIK_DASHBOARD_DOMAIN=${TRAEFIK_DASHBOARD_DOMAIN}"
   echo "CF_USE_PROXY=${CF_USE_PROXY}"
   echo "CF_DNS_API_TOKEN=${CF_DNS_API_TOKEN}"
   echo "ACME_MODE=${ACME_MODE}"
@@ -97,10 +97,6 @@ echo
 read -rp "Digite CONFIRM para aplicar estes valores: " _OK
 [[ "${_OK}" == "CONFIRM" ]] || die "Abortado pelo usuário."
 
-# Exports para os próximos passos
-export LE_EMAIL DASH_DOMAIN CF_DNS_API_TOKEN ACME_MODE CANONICAL_MW
+# Exporta para os próximos passos (NOMES EXATOS usados no stack.yml!)
+export LETSENCRYPT_EMAIL TRAEFIK_DASHBOARD_DOMAIN CF_DNS_API_TOKEN ACME_MODE CANONICAL_MW
 export DASH_USER DASH_PW HTPASSWD_ESCAPED USE_DB_STACK MYSQL_ROOT_PASSWORD TZ
-
-# Também exporta com os nomes usados no stack.yml:
-export LETSENCRYPT_EMAIL="$LE_EMAIL"
-export TRAEFIK_DASHBOARD_DOMAIN="$DASH_DOMAIN"

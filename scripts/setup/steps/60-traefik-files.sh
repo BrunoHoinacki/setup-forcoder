@@ -22,7 +22,7 @@ rm -f /opt/traefik/letsencrypt/acme.json
 touch /opt/traefik/letsencrypt/acme.json
 chmod 600 /opt/traefik/letsencrypt/acme.json
 
-# .env com os MESMOS nomes usados no stack.yml
+# .env opcional (documenta variáveis) — o deploy usa as variáveis exportadas pelo shell
 cat >/opt/traefik/.env <<EOF
 LETSENCRYPT_EMAIL=${LETSENCRYPT_EMAIL}
 TRAEFIK_DASHBOARD_DOMAIN=${TRAEFIK_DASHBOARD_DOMAIN}

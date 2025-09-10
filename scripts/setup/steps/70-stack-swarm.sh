@@ -139,6 +139,7 @@ cat >> "${STACK_DIR}/stack.yml" <<'REST'
       replicas: 1
       labels:
         - "traefik.enable=true"
+        - "traefik.docker.network=proxy"
 
         # dashboard protegido + canonical de middlewares@file
         - "traefik.http.routers.traefik.rule=Host(`${TRAEFIK_DASHBOARD_DOMAIN}`) && (PathPrefix(`/dashboard`) || PathPrefix(`/api`))"
@@ -182,6 +183,7 @@ cat >> "${STACK_DIR}/stack.yml" <<'DB'
           - node.role == manager
       labels:
         - "traefik.enable=true"
+        - "traefik.docker.network=proxy"
         - "traefik.http.routers.pma.rule=Host(`${TRAEFIK_DASHBOARD_DOMAIN}`) && (PathPrefix(`/phpmyadmin`) || PathPrefix(`/phpmyadmin/`))"
         - "traefik.http.routers.pma.entrypoints=websecure"
         - "traefik.http.routers.pma.tls.certresolver=le"
