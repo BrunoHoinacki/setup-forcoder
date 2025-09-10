@@ -1,11 +1,28 @@
 # shellcheck shell=bash
+# Step 70 — gera /opt/traefik/stack.yml (Swarm)
+
+# ===== Logging isolado do step =====
+STEP_NO="70"
+STEP_NAME="stack-swarm"
+STEP_LOG_DIR="/var/log/setup-forcoder-logs/setup"
+mkdir -p "$STEP_LOG_DIR" 2>/dev/null || true
+STEP_LOG_FILE="${STEP_LOG_DIR}/step${STEP_NO}-${STEP_NAME}_$(date +%F_%H%M%S).log"
+
+# salva FDs e duplica saída apenas dentro deste step
+exec 3>&1 4>&2
+exec > >(stdbuf -oL -eL tee -a "$STEP_LOG_FILE") 2>&1
+echo "---- BEGIN STEP ${STEP_NO} (${STEP_NAME}) $(date -Iseconds) on $(hostname) ----"
+echo "Log file: $STEP_LOG_FILE"
+
 b "==> Gerando stack.yml (Swarm) em /opt/traefik"
 
 STACK_DIR="/opt/traefik"
 mkdir -p "${STACK_DIR}"
 
+# Cabeçalho + networks + service traefik com UM ÚNICO 'environment:'
 cat > "${STACK_DIR}/stack.yml" <<'HDR'
 version: "3.9"
+
 networks:
   proxy:
     external: true
@@ -29,6 +46,8 @@ services:
         published: 443
         protocol: udp   # HTTP/3 (QUIC)
         mode: ingress
+
+    # IMPORTANTE: único bloco 'environment'
     environment:
       - TZ=${TZ}
       - TRAEFIK_PILOT_DASHBOARD=false
@@ -37,10 +56,9 @@ services:
       - TRAEFIK_API_DISABLEDASHBOARDAD=true
 HDR
 
-# injeta Cloudflare env se dns01
-if [[ "$ACME_MODE" = "dns01" && -n "$CF_DNS_API_TOKEN" ]]; then
+# Se ACME dns01 + Cloudflare, adiciona só a linha, SEM abrir novo 'environment:'
+if [[ "$ACME_MODE" = "dns01" && -n "${CF_DNS_API_TOKEN:-}" ]]; then
   cat >> "${STACK_DIR}/stack.yml" <<'CFENV'
-    environment:
       - CF_DNS_API_TOKEN=${CF_DNS_API_TOKEN}
 CFENV
 fi
@@ -71,6 +89,7 @@ cat >> "${STACK_DIR}/stack.yml" <<'TAIL'
       - --certificatesresolvers.le.acme.storage=/letsencrypt/acme.json
 TAIL
 
+# Alterna challenge conforme modo
 if [[ "$ACME_MODE" = "dns01" ]]; then
   cat >> "${STACK_DIR}/stack.yml" <<'DNS'
       - --certificatesresolvers.le.acme.dnschallenge=true
@@ -122,7 +141,7 @@ cat >> "${STACK_DIR}/stack.yml" <<'REST'
       labels:
         - "traefik.enable=true"
 
-        # middlewares canonical (www <-> root) ficam definidos em file provider (dynamic/)
+        # dashboard protegido + canonical de middlewares@file
         - "traefik.http.routers.traefik.rule=Host(`${TRAEFIK_DASHBOARD_DOMAIN}`) && (PathPrefix(`/dashboard`) || PathPrefix(`/api`))"
         - "traefik.http.routers.traefik.entrypoints=websecure"
         - "traefik.http.routers.traefik.tls.certresolver=le"
@@ -177,3 +196,12 @@ cat >> "${STACK_DIR}/stack.yml" <<'DB'
         - "traefik.http.middlewares.pma-https.headers.customrequestheaders.X-Forwarded-Host=${TRAEFIK_DASHBOARD_DOMAIN}"
 DB
 fi
+
+ok "stack.yml gerado em ${STACK_DIR}/stack.yml"
+echo "Pré-visualização (primeiras linhas):"
+nl -ba "${STACK_DIR}/stack.yml" | sed -n '1,120p' || true
+
+echo "---- END STEP ${STEP_NO} (${STEP_NAME}) $(date -Iseconds) ----"
+# restaura FDs originais
+exec 1>&3 2>&4
+exec 3>&- 4>&-
