@@ -53,7 +53,6 @@ services:
       - TRAEFIK_PILOT_DASHBOARD=false
       - TRAEFIK_EXPERIMENTAL_PLUGINS=false
       - TRAEFIK_GLOBAL_CHECKNEWVERSION=false
-      - TRAEFIK_API_DISABLEDASHBOARDAD=true
 HDR
 
 # Se ACME dns01 + Cloudflare, adiciona só a linha, SEM abrir novo 'environment:'
@@ -68,12 +67,12 @@ cat >> "${STACK_DIR}/stack.yml" <<'TAIL'
     command:
       - --log.level=INFO
       - --api.dashboard=true
-      - --api.disabledashboardad=true
       - --api.insecure=false
 
-      - --providers.swarm=true
+      - --providers.docker=true
       - --providers.docker.swarmMode=true
       - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=proxy
       - --providers.file.directory=/dynamic
       - --providers.file.watch=true
 
@@ -148,6 +147,8 @@ cat >> "${STACK_DIR}/stack.yml" <<'REST'
         - "traefik.http.routers.traefik.service=api@internal"
         - "traefik.http.routers.traefik.middlewares=dashboard-auth,canonical@file"
         - "traefik.http.middlewares.dashboard-auth.basicauth.usersfile=/dynamic/auth.htpasswd"
+        # evita "port is missing" para o container do traefik
+        - "traefik.http.services.traefik.loadbalancer.server.port=8080"
 REST
 
 # MySQL + phpMyAdmin opcionais dentro da mesma stack (amarrados às redes)

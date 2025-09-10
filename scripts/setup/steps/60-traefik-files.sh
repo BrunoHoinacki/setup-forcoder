@@ -35,13 +35,26 @@ EOF
 ok ".env escrito em /opt/traefik/.env"
 
 # Middlewares dinâmicos (compress + security headers + canonical)
+# Definimos www-to-root e root-to-www aqui no FILE PROVIDER
 cat >/opt/traefik/dynamic/middlewares.yml <<EOF
 http:
   middlewares:
+    www-to-root:
+      redirectRegex:
+        regex: "^https?://www\\.(.+)"
+        replacement: "https://\\1"
+        permanent: true
+
+    root-to-www:
+      redirectRegex:
+        regex: "^https?://([^/]+)"
+        replacement: "https://www.\\1"
+        permanent: true
+
     canonical:
       chain:
         middlewares:
-          - ${RESOLVED_CANONICAL}
+          - ${CANONICAL_MW}
           - compress
           - secure-headers
 
