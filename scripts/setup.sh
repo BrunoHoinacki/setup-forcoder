@@ -17,10 +17,11 @@ run_step() {
 
 run_step 10-prereqs.sh
 run_step 20-inputs.sh
+run_step 35-swarm-init.sh
 run_step 30-install-docker.sh
 run_step 40-ssh-github.sh
 run_step 50-networks.sh
 run_step 60-traefik-files.sh
-run_step 70-compose.sh
+run_step 70-stack-swarm.sh   
 run_step 80-up.sh
 run_step 90-notes.sh

@@ -1,4 +1,4 @@
-# nginx.conf (idêntico ao original)
+# nginx.conf
 cat > "${NGX_DIR}/nginx.conf" <<'NGINX'
 server {
     listen 80 default_server;
@@ -24,7 +24,7 @@ server {
 }
 NGINX
 
-# Dockerfiles parametrizados
+# Dockerfiles parametrizados (templates .tpl)
 cat > "${PHP_SQLITE_DF}.min.tpl" <<'DOCKER'
 FROM __PHP_BASE__
 RUN set -eux; \

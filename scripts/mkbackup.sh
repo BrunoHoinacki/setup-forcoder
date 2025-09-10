@@ -4,7 +4,7 @@ set -euo pipefail
 # =============== mkbackup.sh =======================
 # Cria ZIP contendo SOMENTE o conteúdo de /home/<cliente>/<projeto>/src,
 # e, se MySQL/MariaDB, adiciona dump.sql.gz na raiz do ZIP.
-# Compatível com mkclient.sh (espera dump.sql ou dump.sql.gz em src/).
+# Compatível com Compose e Swarm.
 # Saída: /opt/backups/<cliente>/<projeto>/<cliente>_<projeto>_YYYYmmdd-HHMM.zip
 # ===================================================
 
@@ -31,7 +31,6 @@ ensure_zip(){
 
 # Lê KEY=VALUE (última ocorrência não comentada), removendo aspas de borda
 get_env_kv(){
-  # uso: get_env_kv ARQUIVO CHAVE
   local file="$1" key="$2" raw
   [ -f "$file" ] || { echo ""; return 0; }
   raw="$(grep -E "^[[:space:]]*${key}=" "$file" | grep -v '^[[:space:]]*#' | tail -n1 | cut -d= -f2- | sed 's/[[:space:]]*$//')"
@@ -39,52 +38,84 @@ get_env_kv(){
   printf '%s' "$raw"
 }
 
-# Descobre container do banco: "mysql" OU "mariadb"
-detect_db_container(){
-  if docker ps --format '{{.Names}}' | grep -qx mysql; then
-    echo "mysql"; return 0
-  fi
-  if docker ps --format '{{.Names}}' | grep -qx mariadb; then
-    echo "mariadb"; return 0
-  fi
+is_swarm_active(){ docker info --format '{{.Swarm.LocalNodeState}}' 2>/dev/null | grep -q '^active$'; }
+
+# Encontra um container (task) RUNNING para um service que termine com _mysql ou _mariadb
+find_db_task_container(){
+  local project="$1"
+  local svc
+  for svc in "${project}_mysql" "${project}_mariadb"; do
+    if docker service ls --format '{{.Name}}' | grep -qx "$svc"; then
+      local tid cid
+      tid="$(docker service ps --filter 'desired-state=running' --format '{{.ID}}' "$svc" | head -n1 || true)"
+      [ -z "$tid" ] && continue
+      cid="$(docker inspect --format '{{.Status.ContainerStatus.ContainerID}}' "$tid" 2>/dev/null || true)"
+      [ -n "$cid" ] && { echo "$cid"; return 0; }
+    fi
+  done
+  # fallback: tenta qualquer container com label de service mysql/mariadb
+  docker ps -q --filter "name=_mysql\." --filter "status=running" | head -n1 && return 0
+  docker ps -q --filter "name=_mariadb\." --filter "status=running" | head -n1 && return 0
+  return 1
+}
+
+# Descobre container do banco em Compose (nome exato 'mysql' ou 'mariadb'), com fallback por imagem
+detect_db_container_compose(){
+  if docker ps --format '{{.Names}}' | grep -qx mysql; then echo "mysql"; return 0; fi
+  if docker ps --format '{{.Names}}' | grep -qx mariadb; then echo "mariadb"; return 0; fi
+  # fallback fraco por imagem
+  local cid
+  cid="$(docker ps -q --filter 'ancestor=mysql' --filter 'status=running' | head -n1 || true)"
+  [ -n "$cid" ] && { echo "$cid"; return 0; }
+  cid="$(docker ps -q --filter 'ancestor=mariadb' --filter 'status=running' | head -n1 || true)"
+  [ -n "$cid" ] && { echo "$cid"; return 0; }
   echo ""; return 1
 }
 
 dump_mysql_gz(){
-  # Usa mysqldump/mariadb-dump no container detectado; gera dump.sql.gz
-  local db_host="$1" db_port="$2" db_name="$3" db_user="$4" db_pass="$5" out_gz="$6"
-  local ctn=""; ctn="$(detect_db_container || true)"
-  if [ -z "$ctn" ]; then
-    warn "Nenhum container 'mysql' ou 'mariadb' rodando — pulando dump."
-    return 1
-  fi
+  # Preferência: executar mysqldump/mariadb-dump **dentro do container** (Compose ou Swarm).
+  # Se não achar container, tenta no host se cliente estiver instalado.
+  local project="$1" db_host="$2" db_port="$3" db_name="$4" db_user="$5" db_pass="$6" out_gz="$7"
 
-  # Flags específicas
-  local MYSQL_FLAGS=(--single-transaction --routines --events --triggers --set-gtid-purged=OFF --column-statistics=0)
-  local MARIA_FLAGS=(--single-transaction --routines --events --triggers)
+  local ctn=""
+  if is_swarm_active; then
+    ctn="$(find_db_task_container "$project" || true)"
+  else
+    ctn="$(detect_db_container_compose || true)"
+  fi
 
   local AUTH_ARGS=(-u"$db_user" -h "$db_host" -P "${db_port:-3306}")
   local ENVV=()
-  if [ -n "${db_pass:-}" ]; then ENVV=(-e "MYSQL_PWD=$db_pass"); fi
+  [ -n "${db_pass:-}" ] && ENVV=(-e "MYSQL_PWD=$db_pass")
 
+  local MYSQL_FLAGS=(--single-transaction --routines --events --triggers --set-gtid-purged=OFF --column-statistics=0)
+  local MARIA_FLAGS=(--single-transaction --routines --events --triggers)
   local SSL_FLAG="--ssl-mode=DISABLED"
 
-  set +e
-  docker exec "${ENVV[@]}" -i "$ctn" mysqldump "${AUTH_ARGS[@]}" $SSL_FLAG "${MYSQL_FLAGS[@]}" "$db_name" | gzip -9 > "$out_gz"
-  local rc=$?
-  if [ $rc -ne 0 ]; then
-    docker exec "${ENVV[@]}" -i "$ctn" mariadb-dump "${AUTH_ARGS[@]}" "${MARIA_FLAGS[@]}" "$db_name" | gzip -9 > "$out_gz"
-    rc=$?
+  if [ -n "$ctn" ]; then
+    set +e
+    docker exec "${ENVV[@]}" -i "$ctn" mysqldump "${AUTH_ARGS[@]}" $SSL_FLAG "${MYSQL_FLAGS[@]}" "$db_name" | gzip -9 > "$out_gz"
+    local rc=$?
+    if [ $rc -ne 0 ]; then
+      docker exec "${ENVV[@]}" -i "$ctn" mariadb-dump "${AUTH_ARGS[@]}" "${MARIA_FLAGS[@]}" "$db_name" | gzip -9 > "$out_gz"
+      rc=$?
+    fi
+    set -e
+    if [ $rc -eq 0 ]; then ok "Dump (in-container) gerado: $(basename "$out_gz")"; return 0; fi
+    warn "Falha ao gerar dump dentro do container ($ctn). Tentando via host..."
   fi
-  set -e
 
-  if [ $rc -ne 0 ]; then
-    warn "Falha ao gerar dump do banco."
-    return 1
+  # fallback via host: requer cliente instalado
+  if command -v mysqldump >/dev/null 2>&1; then
+    set +e
+    MYSQL_PWD="${db_pass:-}" mysqldump "${AUTH_ARGS[@]}" $SSL_FLAG "${MYSQL_FLAGS[@]}" "$db_name" | gzip -9 > "$out_gz"
+    local rc=$?
+    set -e
+    [ $rc -eq 0 ] && { ok "Dump (host) gerado: $(basename "$out_gz")"; return 0; }
   fi
 
-  ok "Dump gerado: $(basename "$out_gz")"
-  return 0
+  warn "Não foi possível gerar dump do banco."
+  return 1
 }
 
 # ------- Inputs -------
@@ -142,7 +173,7 @@ if [ -f "$ENV_PATH" ]; then
     DB_PASS="$(get_env_kv "$ENV_PATH" "DB_PASSWORD")"
 
     if [ -n "$DB_NAME" ] && [ -n "$DB_USER" ]; then
-      dump_mysql_gz "$DB_HOST" "$DB_PORT" "$DB_NAME" "$DB_USER" "${DB_PASS:-}" "${STAGE}/dump.sql.gz" && DUMP_DONE=1 || true
+      dump_mysql_gz "$PROJECT" "$DB_HOST" "$DB_PORT" "$DB_NAME" "$DB_USER" "${DB_PASS:-}" "${STAGE}/dump.sql.gz" && DUMP_DONE=1 || true
     else
       warn "Variáveis de DB incompletas no .env — sem dump."
     fi

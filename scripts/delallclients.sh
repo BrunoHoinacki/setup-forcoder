@@ -2,9 +2,9 @@
 set -euo pipefail
 
 # =============== delallclients.sh =================
-# Percorre /home/<cliente>/<projeto> e remove TODOS os
-# projetos de TODOS os clientes:
-#  - docker compose down (se houver)
+# Percorre /home/<cliente>/<projeto> e remove TODOS os projetos:
+#  - MODE=compose: docker compose down --remove-orphans --volumes
+#  - MODE=swarm  : docker stack rm <stack> (aguarda remover)
 #  - rm -rf /home/<cliente>/<projeto>
 #  - (opcional) DROP DATABASE + DROP USER no MySQL central
 #
@@ -12,13 +12,13 @@ set -euo pipefail
 #   --yes               não perguntar confirmações (modo não interativo)
 #   --drop-mysql        já habilita drop de DB/USER para todos
 #   --dry-run           apenas mostra o que faria, sem executar
-#   --only-client X     processa apenas /home/X/*
-#   --exclude-client X  ignora /home/X/*
+#   --only-client=X     processa apenas /home/X/*
+#   --exclude-client=X  ignora /home/X/*
 #
 # Segurança:
 #  - só remove caminhos tipo /home/<cliente>/<projeto>
 #  - confirma "DELETE ALL" por padrão
-#  - valida nomes de DB/USER
+#  - valida nomes de DB/USER antes de dropar
 # ==================================================
 
 b(){ echo -e "\033[1m$*\033[0m"; }
@@ -33,10 +33,19 @@ sanitize_name(){
   echo -n "$s"
 }
 
+sanitize_stack(){
+  local s="$1"
+  s="$(echo -n "$s" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g' | sed 's/--\+/-/g' | sed 's/^-//;s/-$//')"
+  printf '%s' "${s:0:48}"
+}
+
 from_env(){
-  local file="$1" key="$2"
+  # Lê KEY=VALUE (última ocorrência não comentada); remove aspas de borda
+  local file="$1" key="$2" raw
   [ -f "$file" ] || return 1
-  sed -n -E "s/^[[:space:]]*${key}=([^\r\n#]+).*$/\1/p" "$file" | tail -n1 | tr -d '"'\'
+  raw="$(grep -E "^[[:space:]]*${key}=" "$file" | grep -v '^[[:space:]]*#' | tail -n1 | cut -d= -f2- | sed 's/[[:space:]]*$//')"
+  raw="${raw%\"}"; raw="${raw#\"}"; raw="${raw%\'}"; raw="${raw#\'}"
+  printf '%s' "$raw"
 }
 
 guard_dbname(){
@@ -50,6 +59,18 @@ guard_dbname(){
 guard_username(){
   local u="$1"
   [[ "$u" =~ ^[a-z0-9_]{1,32}$ ]] || die "Nome de usuário suspeito/inválido: '$u'"
+}
+
+swarm_wait_stack_gone(){
+  local stack="$1" t=0 timeout=90
+  while [ $t -lt $timeout ]; do
+    if ! docker stack services "$stack" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 2
+    t=$((t+2))
+  done
+  return 1
 }
 
 MYSQL_READY=0
@@ -97,21 +118,17 @@ for cdir in /home/*; do
   client="$(basename "$cdir")"
 
   # Filtros
-  if [ -n "$ONLY_CLIENT" ] && [ "$client" != "$ONLY_CLIENT" ]; then
-    continue
-  fi
-  if [ -n "$EXCLUDE_CLIENT" ] && [ "$client" = "$EXCLUDE_CLIENT" ]; then
-    continue
-  fi
+  [ -n "$ONLY_CLIENT" ] && [ "$client" != "$ONLY_CLIENT" ] && continue
+  [ -n "$EXCLUDE_CLIENT" ] && [ "$client" = "$EXCLUDE_CLIENT" ] && continue
 
-  # Ignora perfis do sistema comuns
+  # Ignora perfis comuns do sistema
   case "$client" in
-    root|ubuntu|ec2-user|debian|centos) continue;;
+    root|ubuntu|ec2-user|debian|centos) continue ;;
   esac
 
   for pdir in "$cdir"/*; do
     [ -d "$pdir" ] || continue
-    if [ -f "$pdir/docker-compose.yml" ] || [ -d "$pdir/src" ]; then
+    if [ -f "$pdir/docker-compose.yml" ] || [ -f "$pdir/stack.yml" ] || [ -d "$pdir/src" ]; then
       ITEMS+=("${client}${SEP}$(basename "$pdir")${SEP}${pdir}")
     fi
   done
@@ -126,7 +143,8 @@ fi
 b "Projetos encontrados para remoção:"
 for it in "${ITEMS[@]}"; do
   IFS="$SEP" read -r c p path <<<"$it"
-  echo " - $c / $p  ($path)"
+  mode="compose"; [ -f "$path/stack.yml" ] && mode="swarm"
+  echo " - $c / $p  ($path)  [${mode}]"
 done
 
 # Confirmação global
@@ -140,9 +158,7 @@ fi
 if [ "$MYSQL_DROP_ALL" -ne 1 ] && [ "$YES" -ne 1 ] && [ "$MYSQL_READY" -eq 1 ]; then
   echo
   read -rp "Dropar também TODOS os bancos/usuários correspondentes no MySQL central? [y/N]: " ANS
-  if [[ "${ANS:-N}" =~ ^[Yy]$ ]]; then
-    MYSQL_DROP_ALL=1
-  fi
+  [[ "${ANS:-N}" =~ ^[Yy]$ ]] && MYSQL_DROP_ALL=1
 fi
 
 # Função: deduz DB_NAME/DB_USER
@@ -169,53 +185,76 @@ derive_db(){
   fi
 }
 
+mysql_drop(){
+  local db="$1" user="$2"
+  guard_dbname "$db"
+  guard_username "$user"
+  docker exec -i mysql mariadb -uroot -p"${MYSQL_ROOT_PASSWORD}" <<SQL || warn "  - Falha ao dropar DB/USER (seguindo)."
+DROP DATABASE IF EXISTS \`${db}\`;
+DROP USER IF EXISTS '${user}'@'%';
+FLUSH PRIVILEGES;
+SQL
+  ok "  - DB \`${db}\` e USER '${user}' processados."
+}
+
 # Execução por item
 TOTAL=0
 for it in "${ITEMS[@]}"; do
   IFS="$SEP" read -r CLIENT PROJECT ROOT <<<"$it"
   SRC_DIR="${ROOT}/src"
   COMPOSE="${ROOT}/docker-compose.yml"
+  STACK_FILE="${ROOT}/stack.yml"
+  STATE="${ROOT}/.provision/state.env"
+
+  MODE="compose"
+  [ -f "$STACK_FILE" ] && MODE="swarm"
+
+  STACK_NAME=""
+  if [ -f "$STATE" ]; then
+    # shellcheck disable=SC1090
+    . "$STATE" || true
+  fi
+  [ -z "${STACK_NAME:-}" ] && STACK_NAME="$(sanitize_stack "${CLIENT}-${PROJECT}")"
 
   # Deriva DB info
   IFS="$SEP" read -r DB_NAME DB_USER <<<"$(derive_db "$CLIENT" "$PROJECT" "$SRC_DIR")"
 
-  b "Removendo: $CLIENT / $PROJECT"
+  b "Removendo: $CLIENT / $PROJECT (${MODE})"
   echo " - Path    : $ROOT"
-  echo " - Compose : $([ -f "$COMPOSE" ] && echo 'encontrado' || echo 'N/A')"
   echo " - DB alvo : $DB_NAME (user: $DB_USER)"
 
   if [ "$DRY" -eq 1 ]; then
-    ok "[dry-run] pular execução"
+    ok "[dry-run] pular execução real"
     echo
     TOTAL=$((TOTAL+1))
     continue
   fi
 
-  # 1) Derrubar containers
-  if [ -f "$COMPOSE" ]; then
-    b "  - docker compose down..."
-    ( cd "$ROOT" && docker compose down --remove-orphans ) || warn "    Falha ao derrubar via compose (pode já estar parado)."
+  # 1) Derrubar stack/containers
+  if [ "$MODE" = "swarm" ]; then
+    b "  - docker stack rm ${STACK_NAME}"
+    set +e
+    docker stack rm "$STACK_NAME"
+    set -e
+    swarm_wait_stack_gone "$STACK_NAME" || warn "  - Timeout aguardando remoção da stack."
   else
-    for S in php nginx; do
-      CNAME="${CLIENT}_${PROJECT}_${S}"
-      if docker ps -a --format '{{.Names}}' | grep -qx "$CNAME"; then
-        warn "  - Removendo container solto: $CNAME"
-        docker rm -f "$CNAME" || true
-      fi
-    done
+    if [ -f "$COMPOSE" ]; then
+      b "  - docker compose down --remove-orphans --volumes"
+      ( cd "$ROOT" && docker compose down --remove-orphans --volumes ) || warn "    Falha ao derrubar via compose."
+    else
+      for S in php nginx; do
+        CNAME="${CLIENT}_${PROJECT}_${S}"
+        if docker ps -a --format '{{.Names}}' | grep -qx "$CNAME"; then
+          warn "  - Removendo container solto: $CNAME"
+          docker rm -f "$CNAME" || true
+        fi
+      done
+    fi
   fi
 
   # 2) Drop MySQL (opcional)
   if [ "$MYSQL_DROP_ALL" -eq 1 ] && [ "$MYSQL_READY" -eq 1 ]; then
-    guard_dbname "$DB_NAME"
-    guard_username "$DB_USER"
-    b "  - Dropando DB/USER no MySQL central..."
-    docker exec -i mysql mariadb -uroot -p"${MYSQL_ROOT_PASSWORD}" <<SQL || warn "  - Falha ao dropar DB/USER (seguindo sem abortar)."
-DROP DATABASE IF EXISTS \`${DB_NAME}\`;
-DROP USER IF EXISTS '${DB_USER}'@'%';
-FLUSH PRIVILEGES;
-SQL
-    ok "  - DB \`${DB_NAME}\` e USER '${DB_USER}' processados."
+    mysql_drop "$DB_NAME" "$DB_USER"
   fi
 
   # 3) Remover pasta

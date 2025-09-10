@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# -------- UI --------
 b(){ echo -e "\033[1m$*\033[0m"; }
 ok(){ echo "  [OK] $*"; }
 warn(){ echo "  [!] $*"; }
 die(){ echo "  [ERR] $*" >&2; exit 1; }
 need_root(){ [ "${EUID:-$(id -u)}" -eq 0 ] || die "Execute como root (sudo su)."; }
-
 esc_sed(){ printf '%s' "$1" | sed -e 's/[\/&#]/\\&/g'; }
 
 ask_yes_no(){
@@ -16,6 +16,7 @@ ask_yes_no(){
   [[ "$ans" =~ ^(y|yes|s|sim)$ ]]
 }
 
+# -------- util --------
 ensure_github_known_hosts(){
   mkdir -p /root/.ssh && chmod 700 /root/.ssh
   touch /root/.ssh/known_hosts && chmod 644 /root/.ssh/known_hosts
@@ -28,7 +29,7 @@ ensure_github_known_hosts(){
 
 ensure_unzip(){
   command -v unzip >/dev/null 2>&1 && return 0
-  warn "Utilitário 'unzip' não encontrado — tentando instalar..."
+  warn "Instalando 'unzip'..."
   if command -v apt-get >/dev/null; then apt-get update -y && apt-get install -y unzip >/dev/null
   elif command -v apk >/dev/null; then apk add --no-cache unzip >/dev/null
   elif command -v yum >/dev/null; then yum install -y unzip >/dev/null
@@ -39,7 +40,7 @@ ensure_unzip(){
 
 upsert_env(){
   local file="$1" key="$2" val="$3" esc_val; esc_val="$(esc_sed "$val")"
-  if grep -qE "^[[:space:]]*${key}=" "$file"; then
+  if grep -qE "^[[:space:]]*${key}=" "$file" 2>/dev/null; then
     sed -i -E "s|^[[:space:]]*${key}=.*|${key}=${esc_val}|g" "$file"
   else
     printf '%s=%s\n' "$key" "$val" >> "$file"
@@ -68,10 +69,36 @@ adjust_env_existing(){
   fi
 }
 
-inside_php(){ ( cd "$ROOT" && docker compose run --rm php bash -lc "$*" ); }
+# -------- validações UX --------
+validate_domain_dns(){
+  local dom="$1"
+  command -v getent >/dev/null 2>&1 || { warn "getent ausente; pulando validação DNS."; return 0; }
+  local ip_me ip_dns
+  ip_me="$(curl -fsSL ifconfig.me || curl -fsSL icanhazip.com || echo '')"
+  ip_dns="$(getent ahostsv4 "$dom" 2>/dev/null | awk '/STREAM/ {print $1; exit}')"
+  if [[ -z "$ip_me" || -z "$ip_dns" ]]; then
+    warn "Não consegui validar DNS → VPS. Continue, mas certifique o A/AAAA do domínio."
+    return 0
+  fi
+  if [[ "$ip_me" != "$ip_dns" ]]; then
+    warn "DNS de $dom resolve para $ip_dns, mas o IP desta VPS é $ip_me."
+    warn "Para HTTP-01, deixe o DNS 'cinza' apontando para $ip_me até emitir o certificado."
+    return 0
+  fi
+  ok "DNS do domínio aponta para esta VPS ($ip_me)."
+}
 
+validate_git_ssh(){
+  local url="$1"
+  ensure_github_known_hosts
+  ssh -T -o StrictHostKeyChecking=accept-new git@github.com 2>&1 | grep -qi "successfully authenticated" || \
+    warn "SSH com GitHub ainda não autenticado. Se der erro no git clone, rode o setup (40-ssh-github) e tente de novo."
+  [[ "$url" =~ ^git@github\.com:.+\.git$ ]] || warn "URL não parece SSH do GitHub (git@github.com:org/repo.git)."
+}
+
+# -------- ACME trigger --------
 trigger_acme_and_wait(){
-  local domain="$1" acme="/opt/traefik/letsencrypt/acme.json" t=0 timeout=90
+  local domain="$1" acme="/opt/traefik/letsencrypt/acme.json" t=0 timeout=120
   curl -kIs "https://${domain}" >/dev/null 2>&1 || true
   while [ $t -lt $timeout ]; do
     if [ -f "$acme" ] && grep -q "\"main\"\\s*:\\s*\"${domain}\"" "$acme" && grep -q "\"certificate\"" "$acme"; then
@@ -88,13 +115,39 @@ trigger_acme_and_wait(){
   return 1
 }
 
-# STATE
+# -------- Compose/Swarm runners unificados --------
+is_swarm_active(){ docker info --format '{{.Swarm.LocalNodeState}}' 2>/dev/null | grep -q '^active$'; }
+task_container_for_service(){
+  local svc="$1"
+  local tid cid
+  tid="$(docker service ps --filter 'desired-state=running' --format '{{.ID}}' "$svc" | head -n1 || true)"
+  [ -z "$tid" ] && return 1
+  cid="$(docker inspect --format '{{.Status.ContainerStatus.ContainerID}}' "$tid" 2>/dev/null || true)"
+  [ -n "$cid" ] && echo "$cid"
+}
+
+run_in_php(){
+  # Usa MODE (compose|swarm), ROOT, STACK_NAME (== PROJECT), executa comando no container php
+  local cmd="$*"
+  if [[ "${MODE}" = "compose" ]]; then
+    ( cd "${ROOT}" && docker compose run --rm php bash -lc "$cmd" )
+  else
+    local svc="${STACK_NAME}_php"
+    local cid; cid="$(task_container_for_service "$svc" || true)"
+    [ -n "$cid" ] || die "Nenhuma task RUNNING do serviço $svc."
+    docker exec -it "$cid" bash -lc "$cmd" || docker exec -it "$cid" sh -lc "$cmd"
+  fi
+}
+
+# -------- STATE --------
 save_state(){
   mkdir -p "$(dirname "$STATE")"
   {
     printf 'CLIENT=%q\n' "$CLIENT"
     printf 'PROJECT=%q\n' "$PROJECT"
+    printf 'STACK_NAME=%q\n' "${STACK_NAME:-$PROJECT}"
     printf 'DOMAIN=%q\n' "$DOMAIN"
+    printf 'MODE=%q\n' "$MODE"
     printf 'PHP_VER=%q\n' "$PHP_VER"
     printf 'DB_MODE=%q\n' "$DB_MODE"
     printf 'CODE_SRC_OPT=%q\n' "$CODE_SRC_OPT"
@@ -110,6 +163,7 @@ save_state(){
     printf 'SRC_DIR=%q\n' "$SRC_DIR"
     printf 'NGX_DIR=%q\n' "$NGX_DIR"
     printf 'COMPOSE=%q\n' "$COMPOSE"
+    printf 'STACK_FILE=%q\n' "$STACK_FILE"
     printf 'PHP_SQLITE_DF=%q\n' "$PHP_SQLITE_DF"
     printf 'PHP_MYSQL_DF=%q\n' "$PHP_MYSQL_DF"
     printf 'DB_NAME=%q\n' "${DB_NAME:-}"
@@ -120,7 +174,7 @@ save_state(){
   } > "$STATE"
 }
 
-# Carregar state se existir (quando step é rodado “sozinho”)
+# Carrega STATE se existir quando um step roda “sozinho”
 if [[ -n "${STATE:-}" && -f "${STATE}" ]]; then
   # shellcheck disable=SC1090
   source "${STATE}"

@@ -1,10 +1,8 @@
+# Gera Dockerfile efetivo conforme perfil
 DF_PATH="./php.sqlite.Dockerfile"; [[ "$DB_MODE" = "mysql" ]] && DF_PATH="./php.mysql.Dockerfile"
 
-# Seleção do Dockerfile com base no PHP_PROFILE
-# (variáveis: PHP_PROFILE, DB_MODE, PHP_SQLITE_DF, PHP_MYSQL_DF)
-
 pick_tpl () {
-  local base="$1"  # caminho base sem sufixo (ex.: php.mysql.Dockerfile)
+  local base="$1"  # caminho base sem sufixo
   local profile="${PHP_PROFILE:-min}"
   case "$profile" in
     full) cp -f "${base}.full.tpl" "${base}";;
@@ -18,6 +16,10 @@ else
   pick_tpl "${PHP_SQLITE_DF}"
 fi
 
+if [[ "${MODE}" != "compose" ]]; then
+  ok "MODE=${MODE} → pulando geração do docker-compose.yml (stack será gerada no step 65)."
+  save_state; exit 0
+fi
 
 b "==> Gerando docker-compose.yml"
 cat > "${COMPOSE}" <<YAML

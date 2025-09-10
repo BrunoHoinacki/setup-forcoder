@@ -2,12 +2,14 @@
 set -euo pipefail
 
 # ===========================
-# resetsetup.sh
-# Zera a infra criada pelo setup.sh (Traefik + MySQL + phpMyAdmin)
-# - Derruba containers/compose
+# resetsetup.sh  (versão Swarm)
+# Zera a infra criada pelo setup.sh (Traefik + opcional MySQL/phpMyAdmin) em Docker Swarm
+# - Remove a stack 'traefik' (Swarm)
 # - (Opcional) preserva dados do MySQL em /opt/zips/*.tgz
-# - Remove /opt/traefik (inclui ACME/certs)
-# - Tenta remover redes proxy/db se vazias
+# - Remove /opt/traefik (inclui ACME/certs/config)
+# - Tenta remover redes overlay proxy/db se vazias
+# - (Opcional) leave do Swarm
+# Mantém compatibilidade com legado (compose) se existir docker-compose.yml
 # ===========================
 
 b(){ echo -e "\033[1m$*\033[0m"; }
@@ -34,31 +36,54 @@ net_is_empty() {
   [[ "$n" = "0" ]]
 }
 
+stack_exists() { docker stack ls --format '{{.Name}}' | grep -qx "$1"; }
+
+wait_stack_removed() {
+  local name="$1" tries=30
+  while [ $tries -gt 0 ]; do
+    if ! stack_exists "$name"; then return 0; fi
+    sleep 1; tries=$((tries-1))
+  done
+  return 1
+}
+
 TRAEFIK_DIR="/opt/traefik"
 MYSQL_DATA_DIR="${TRAEFIK_DIR}/mysql-data"
 
 need_root
 command -v docker >/dev/null 2>&1 || die "Docker não encontrado. Nada para resetar."
 
-b "==> Reset da infra Traefik/MySQL"
-echo "Isto vai derrubar Traefik, (opcionalmente) MySQL/phpMyAdmin e apagar ${TRAEFIK_DIR}."
+b "==> Reset da infra (Swarm) — Traefik / MySQL / phpMyAdmin"
+echo "Isto vai remover a stack 'traefik', (opcionalmente) MySQL/phpMyAdmin e apagar ${TRAEFIK_DIR}."
 read -rp "Para confirmar, digite DELETE: " CONFIRM
 [[ "$CONFIRM" == "DELETE" ]] || die "Abortado."
 
-# 1) Derrubar via compose, se existir
+# 0) Legacy: derrubar via compose se existir (compatibilidade)
 if [ -f "${TRAEFIK_DIR}/docker-compose.yml" ]; then
-  b "==> docker compose down (com volumes/orphans) em ${TRAEFIK_DIR}"
+  b "==> [LEGADO] docker compose down (com volumes/orphans) em ${TRAEFIK_DIR}"
   ( cd "${TRAEFIK_DIR}" && docker compose down --volumes --remove-orphans ) || warn "compose down retornou erro (seguindo)."
-else
-  warn "docker-compose.yml não encontrado em ${TRAEFIK_DIR} — removendo por nome."
 fi
 
-# 2) Remover containers por nome (idempotente)
+# 1) Remover a stack Swarm 'traefik' (se existir)
+if stack_exists "traefik"; then
+  b "==> Removendo stack 'traefik' (Swarm)"
+  docker stack rm traefik || warn "Falha ao remover stack (seguindo)."
+  b "==> Aguardando serviços finalizarem…"
+  if ! wait_stack_removed "traefik"; then
+    warn "A stack 'traefik' ainda aparece listada. Continuando mesmo assim."
+  else
+    ok "Stack 'traefik' removida."
+  fi
+else
+  warn "Stack 'traefik' não encontrada (talvez já removida)."
+fi
+
+# 2) Remover containers por nome (se sobrar algo de modo legado)
 rm_container traefik
 rm_container phpmyadmin
 rm_container mysql
 
-# 3) Opcional: preservar dados do MySQL
+# 3) Opcional: preservar dados do MySQL (bind mount em /opt/traefik/mysql-data)
 PRESERVED_ARCHIVE=""
 if [ -d "${MYSQL_DATA_DIR}" ]; then
   if ask_yes_no "Deseja PRESERVAR os dados do MySQL (compactar em /opt/zips)? [y/N]:" "N"; then
@@ -73,7 +98,7 @@ if [ -d "${MYSQL_DATA_DIR}" ]; then
   fi
 fi
 
-# 4) Apagar /opt/traefik inteiro (ACME/certs/config)
+# 4) Apagar /opt/traefik inteiro (ACME/certs/config, logs, dynamic, etc.)
 if [ -d "${TRAEFIK_DIR}" ]; then
   b "==> Removendo ${TRAEFIK_DIR}"
   rm -rf --one-file-system "${TRAEFIK_DIR}"
@@ -82,7 +107,7 @@ else
   warn "${TRAEFIK_DIR} não existe — nada a remover."
 fi
 
-# 5) Tentar remover redes proxy/db (somente se vazias)
+# 5) Tentar remover redes overlay proxy/db (somente se vazias)
 for NET in proxy db; do
   if docker network inspect "$NET" >/dev/null 2>&1; then
     if net_is_empty "$NET"; then
@@ -97,10 +122,16 @@ for NET in proxy db; do
   fi
 done
 
-# 6) Dicas finais
+# 6) (Opcional) sair do Swarm
+if ask_yes_no "Deseja também sair do Docker Swarm neste nó (docker swarm leave --force)? [y/N]: " "N"; then
+  docker swarm leave --force || warn "Falha ao sair do Swarm."
+  ok "Saiu do Swarm neste nó."
+fi
+
+# 7) Dicas finais
 b "==> Limpeza concluída!"
 [ -n "${PRESERVED_ARCHIVE}" ] && echo "Backup MySQL preservado: ${PRESERVED_ARCHIVE}"
-echo "Agora você pode rodar novamente o setup:"
+echo "Para reconfigurar, rode novamente o setup:"
 echo "  bash /opt/devops-stack/scripts/setup.sh"
 echo
 echo "Se for mudar o domínio do dashboard Traefik, informe o novo domínio quando o setup pedir."
