@@ -31,13 +31,11 @@ CAN="${CAN:-1}"
 [[ "$CAN" =~ ^[12]$ ]] || die "Escolha inválida."
 CANONICAL_MW="www-to-root"; [ "$CAN" = "2" ] && CANONICAL_MW="root-to-www"
 
-# RESOLVED_CANONICAL é usado no provider 'file' (middlewares.yml) para encadear com um middleware vindo do provider docker
-RESOLVED_CANONICAL="${CANONICAL_MW}@docker"
-
 read -rp "Usuário BasicAuth do dashboard (default admin): " DASH_USER
 DASH_USER="${DASH_USER:-admin}"
-read -rsp "Senha BasicAuth do dashboard: " DASH_PW
-echo
+
+# Senha VISÍVEL (sem -s), conforme pedido
+read -rp "Senha BasicAuth do dashboard: " DASH_PW
 [ -n "${DASH_PW:-}" ] || die "Senha é obrigatória."
 
 # Gera a linha do htpasswd e ESCAPA $ -> $$ para YAML/docker
@@ -48,8 +46,8 @@ USE_DB_STACK="${USE_DB_STACK:-Y}"
 
 MYSQL_ROOT_PASSWORD=""
 if [[ "${USE_DB_STACK^^}" == "Y" ]]; then
-  read -rsp "Senha do root do MySQL (vazio=gerar): " MYSQL_ROOT_PASSWORD
-  echo
+  # Senha VISÍVEL (sem -s)
+  read -rp "Senha do root do MySQL (vazio=gerar): " MYSQL_ROOT_PASSWORD
   if [[ -z "$MYSQL_ROOT_PASSWORD" ]]; then
     # senha amigável p/ copiar (sem +=/), suficientemente aleatória
     if command -v openssl >/dev/null 2>&1; then
@@ -70,7 +68,7 @@ Let's Encrypt e-mail      : ${LE_EMAIL}
 Dashboard domain          : ${DASH_DOMAIN}
 Cloudflare proxy          : $([ $CF_USE_PROXY -eq 1 ] && echo "YES" || echo "NO")
 ACME mode                 : ${ACME_MODE}
-Canonical middleware      : ${CANONICAL_MW}  (encadeado via canonical@file + ${RESOLVED_CANONICAL})
+Canonical middleware      : ${CANONICAL_MW}  (encadeado via canonical@file)
 BasicAuth user            : ${DASH_USER}
 BasicAuth password (plain): ${DASH_PW}
 Usar MySQL/phpMyAdmin     : ${USE_DB_STACK}
@@ -90,7 +88,6 @@ INPUT_LOG_FILE="${INPUT_LOG_DIR}/inputs_$(date +%F_%H%M%S).log"
   echo "CF_DNS_API_TOKEN=${CF_DNS_API_TOKEN}"
   echo "ACME_MODE=${ACME_MODE}"
   echo "CANONICAL_MW=${CANONICAL_MW}"
-  echo "RESOLVED_CANONICAL=${RESOLVED_CANONICAL}"
   echo "DASH_USER=${DASH_USER}"
   echo "DASH_PW=${DASH_PW}"
   echo "USE_DB_STACK=${USE_DB_STACK}"
@@ -104,5 +101,5 @@ read -rp "Digite CONFIRM para aplicar estes valores: " _OK
 [[ "${_OK}" == "CONFIRM" ]] || die "Abortado pelo usuário."
 
 # Exporta para os próximos passos
-export LE_EMAIL DASH_DOMAIN CF_DNS_API_TOKEN ACME_MODE CANONICAL_MW RESOLVED_CANONICAL
+export LE_EMAIL DASH_DOMAIN CF_DNS_API_TOKEN ACME_MODE CANONICAL_MW
 export DASH_USER DASH_PW HTPASSWD_ESCAPED USE_DB_STACK MYSQL_ROOT_PASSWORD TZ
