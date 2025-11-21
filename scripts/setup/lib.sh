@@ -4,7 +4,7 @@ set -euo pipefail
 # ----------- UI helpers -----------
 b(){ echo -e "\033[1m$*\033[0m"; }
 ok(){ echo -e "  [OK] $*"; }
-warn(){ echo -e "  [!] $*"; }
+warn(){ echo -e "  [!] $*" >&2; }
 die(){ echo -e "  [ERR] $*" >&2; exit 1; }
 
 # ----------- guards -----------
